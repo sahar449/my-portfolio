@@ -83,16 +83,16 @@ def init_db():
                 image_filename   VARCHAR(100)
             )
         """)
-        cur.execute("SELECT COUNT(*) as cnt FROM profile")
-        if cur.fetchone()["cnt"] == 0:
-            cur.execute("""
-                INSERT INTO profile (id, name, title, bio, github_url, linkedin_url, photo_filename)
-                VALUES (1, 'Sahar', 'DevOps Engineer',
-                        'DevOps Engineer with experience in AWS, Kubernetes, and Terraform.',
-                        'https://github.com/sahar449',
-                        'https://www.linkedin.com/in/sahar-bittman',
-                        'me.jpg')
-            """)
+        cur.execute("""
+            INSERT INTO profile (id, name, title, bio, github_url, linkedin_url, photo_filename)
+            VALUES (1, 'Sahar', 'DevOps Engineer',
+                    'DevOps Engineer with experience in AWS, Kubernetes, and Terraform.',
+                    'https://github.com/sahar449',
+                    'https://www.linkedin.com/in/sahar-bittman-007343115/',
+                    'me.jpg')
+            ON DUPLICATE KEY UPDATE
+                linkedin_url = VALUES(linkedin_url)
+        """)
         cur.execute("SELECT COUNT(*) as cnt FROM certificates")
         if cur.fetchone()["cnt"] == 0:
             cur.executemany("""
@@ -101,13 +101,16 @@ def init_db():
             """, [
                 ("HashiCorp Terraform Associate", "HashiCorp", "Cloud & IaC",
                  "https://www.credly.com/badges/34824123-8ee9-4f3b-b24c-0043907fba7d/linked_in_profile",
-                 "picture.png"),
+                 "tf.png"),
                 ("LPIC-1 Linux Administrator", "Linux Professional Institute", "Linux",
                  "https://cs.lpi.org/caf/Xamman/certification/verify/LPI000495419/tmwjm3h7bb",
-                 None),
+                 "linux.png"),
                 ("B.Sc. Software Engineering", "HIT - Holon Institute of Technology", "Academic",
                  None, "hit.jpeg"),
             ])
+        else:
+            cur.execute("UPDATE certificates SET image_filename='tf.png' WHERE name='HashiCorp Terraform Associate'")
+            cur.execute("UPDATE certificates SET image_filename='linux.png' WHERE name='LPIC-1 Linux Administrator'")
         conn.commit()
     conn.close()
 

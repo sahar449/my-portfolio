@@ -28,6 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Verify Bootstrap succeeded
+        if: github.event_name == 'workflow_run'
         run: |
           CONCLUSION="${{ github.event.workflow_run.conclusion }}"
           if [ "$CONCLUSION" != "success" ]; then
@@ -51,6 +52,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Verify Bootstrap succeeded
+        if: github.event_name == 'workflow_run'
         run: |
           CONCLUSION="${{ github.event.workflow_run.conclusion }}"
           if [ "$CONCLUSION" != "success" ]; then
