@@ -251,3 +251,11 @@ resource "aws_iam_role_policy" "external_dns_policy" {
     ]
   })
 }
+
+resource "aws_eks_addon" "external_dns" {
+  cluster_name             = aws_eks_cluster.this.name
+  addon_name               = "external-dns"
+  addon_version            = "v0.21.0-eksbuild.2"
+  service_account_role_arn = aws_iam_role.external_dns_role.arn
+  depends_on               = [aws_eks_node_group.backend_nodes, aws_eks_node_group.frontend_nodes]
+}
