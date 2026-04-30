@@ -86,12 +86,13 @@ def init_db():
         cur.execute("""
             INSERT INTO profile (id, name, title, bio, github_url, linkedin_url, photo_filename)
             VALUES (1, 'Sahar', 'DevOps Engineer',
-                    'DevOps Engineer with experience in AWS, Kubernetes, and Terraform.',
+                    'DevOps & DevSecOps Engineer with experience in AWS, Kubernetes, Terraform, Helm, Docker, ArgoCD, and Trivy for infrastructure security scanning.',
                     'https://github.com/sahar449',
                     'https://www.linkedin.com/in/sahar-bittman-007343115/',
                     'me.jpg')
             ON DUPLICATE KEY UPDATE
-                linkedin_url = VALUES(linkedin_url)
+                linkedin_url = VALUES(linkedin_url),
+                bio          = VALUES(bio)
         """)
         cur.execute("SELECT COUNT(*) as cnt FROM certificates")
         if cur.fetchone()["cnt"] == 0:
