@@ -71,6 +71,32 @@ jobs:
           cd infra
           terraform apply -auto-approve
 
+      - name: Cleanup orphaned ALB resources
+        if: ${{ github.event.inputs.action == 'destroy' }}
+        run: |
+          VPC_ID=$(aws ec2 describe-vpcs \
+            --filters "Name=tag:Name,Values=${{ env.vpc_name }}" \
+            --query "Vpcs[0].VpcId" --output text)
+
+          echo "=== Deleting orphaned target groups ==="
+          TG_ARNS=$(aws elbv2 describe-target-groups \
+            --query "TargetGroups[?VpcId=='$VPC_ID'].TargetGroupArn" \
+            --output text)
+          for arn in $TG_ARNS; do
+            echo "Deleting target group: $arn"
+            aws elbv2 delete-target-group --target-group-arn "$arn" || true
+          done
+
+          echo "=== Deleting ALB-managed security groups ==="
+          K8S_SGS=$(aws ec2 describe-security-groups \
+            --filters "Name=vpc-id,Values=$VPC_ID" \
+                      "Name=description,Values=[k8s]*" \
+            --query "SecurityGroups[].GroupId" --output text)
+          for sg in $K8S_SGS; do
+            echo "Deleting security group: $sg"
+            aws ec2 delete-security-group --group-id "$sg" || true
+          done
+
       - name: Terraform Destroy (manual)
         if: ${{ github.event.inputs.action == 'destroy' }}
         run: |
