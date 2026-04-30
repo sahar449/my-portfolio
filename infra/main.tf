@@ -78,6 +78,11 @@ module "monitoring" {
   grafana_admin_email    = var.grafana_admin_email
   grafana_admin_username = var.grafana_admin_username
   depends_on             = [module.eks]
+
+  providers = {
+    aws     = aws
+    aws.sso = aws.sso
+  }
 }
 
 output "grafana_url" {

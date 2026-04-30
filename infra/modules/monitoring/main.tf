@@ -1,6 +1,19 @@
-data "aws_ssoadmin_instances" "main" {}
+terraform {
+  required_providers {
+    aws = {
+      source                = "hashicorp/aws"
+      version               = ">= 5.100.0"
+      configuration_aliases = [aws.sso]
+    }
+  }
+}
+
+data "aws_ssoadmin_instances" "main" {
+  provider = aws.sso
+}
 
 resource "aws_identitystore_user" "grafana_admin" {
+  provider          = aws.sso
   identity_store_id = tolist(data.aws_ssoadmin_instances.main.identity_store_ids)[0]
 
   user_name    = var.grafana_admin_username
