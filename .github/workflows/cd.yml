@@ -149,9 +149,23 @@ jobs:
 
           envsubst < ArgoCD/eks-charts-applicationset.yaml | kubectl apply -f -
 
-          echo "Waiting for ALB controller to be ready..."
-          kubectl wait --for=condition=available deployment/aws-load-balancer-controller \
-            -n kube-system --timeout=5m
+          echo "Waiting for ArgoCD to sync alb-controller application..."
+          for i in $(seq 1 30); do
+            HEALTH=$(kubectl get application alb-controller -n argocd \
+              -o jsonpath='{.status.health.status}' 2>/dev/null || echo "NotFound")
+            SYNC=$(kubectl get application alb-controller -n argocd \
+              -o jsonpath='{.status.sync.status}' 2>/dev/null || echo "NotFound")
+            echo "Attempt $i/30 — health: $HEALTH, sync: $SYNC"
+            if [ "$HEALTH" = "Healthy" ] && [ "$SYNC" = "Synced" ]; then
+              echo "ALB controller is healthy and synced"
+              break
+            fi
+            if [ "$i" = "30" ]; then
+              echo "Timeout waiting for alb-controller to be healthy"
+              exit 1
+            fi
+            sleep 15
+          done
 
       - name: Deploy portfolio ApplicationSet
         run: |
