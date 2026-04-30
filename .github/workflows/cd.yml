@@ -214,13 +214,20 @@ jobs:
       - name: Update kubeconfig
         run: aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name ${{ env.CLUSTER_NAME }}
 
-      - name: Delete ArgoCD apps and wait for ALB cleanup
+      - name: Delete portfolio apps and ingresses
         run: |
-          kubectl delete applicationsets --all -n argocd --timeout=5m || true
-          kubectl delete applications --all -n argocd --timeout=5m || true
+          kubectl delete applicationset portfolio -n argocd --timeout=2m || true
+          kubectl delete applications frontend backend -n argocd --timeout=2m || true
           kubectl delete ingress --all --all-namespaces || true
 
-          echo "Waiting for ALBs to be deleted by the ALB controller..."
+          # Force remove any stuck finalizers
+          for app in frontend backend; do
+            kubectl patch application $app -n argocd \
+              -p '{"metadata":{"finalizers":[]}}' --type=merge 2>/dev/null || true
+          done
+
+      - name: Wait for ALBs to be deleted
+        run: |
           VPC_ID=$(aws ec2 describe-vpcs \
             --filters "Name=tag:Name,Values=${{ env.VPC_NAME }}" \
             --query "Vpcs[0].VpcId" --output text)
@@ -236,6 +243,11 @@ jobs:
             echo "Attempt $i/24 — $LB_COUNT ALB(s) remaining..."
             sleep 15
           done
+
+      - name: Delete ALB controller and remaining apps
+        run: |
+          kubectl delete applicationset eks-charts-applications -n argocd --timeout=2m || true
+          kubectl delete application alb-controller -n argocd --timeout=2m || true
 
       - name: Uninstall ArgoCD
         run: helm uninstall argocd -n argocd || true
