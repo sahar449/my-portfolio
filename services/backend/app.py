@@ -133,8 +133,7 @@ def health_db():
         return jsonify({"status": "error", "db": str(e)}), 503
 
 
-@app.route("/profile")
-def profile():
+def get_profile_data():
     if not DB_AVAILABLE:
         return jsonify({"status": "error", "db": "not configured"}), 503
     conn = get_db()
@@ -145,8 +144,7 @@ def profile():
     return jsonify(row)
 
 
-@app.route("/certificates")
-def certificates():
+def get_certificates_data():
     if not DB_AVAILABLE:
         return jsonify({"status": "error", "db": "not configured"}), 503
     conn = get_db()
@@ -155,6 +153,18 @@ def certificates():
         rows = cur.fetchall()
     conn.close()
     return jsonify(rows)
+
+
+@app.route("/profile")
+@app.route("/api/backend/profile")
+def profile():
+    return get_profile_data()
+
+
+@app.route("/certificates")
+@app.route("/api/backend/certificates")
+def certificates():
+    return get_certificates_data()
 
 
 if __name__ == "__main__":
