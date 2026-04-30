@@ -172,6 +172,7 @@ jobs:
           export ECR_FRONTEND=${{ secrets.AWS_ACCOUNT_NUMBER }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/frontend
           export ECR_BACKEND=${{ secrets.AWS_ACCOUNT_NUMBER }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/backend
           export AWS_ACCOUNT_NUMBER=${{ secrets.AWS_ACCOUNT_NUMBER }}
+          export IMAGE_TAG=${{ github.event.workflow_run.head_sha || github.sha }}
 
           envsubst < ArgoCD/applicationset.yaml | kubectl apply -f -
 

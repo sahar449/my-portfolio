@@ -34,7 +34,7 @@ spec:
             app:
               image:
                 repository: "{{ecr}}"
-                tag: latest
+                tag: "${IMAGE_TAG}"
             secrets:
               accountNumber: "{{accountNumber}}"
       destination:
