@@ -81,10 +81,14 @@
 
     .card img {
       width: 100%;
-      height: 160px;
+      height: 200px;
       object-fit: cover;
-      background: #0f1117;
+      object-position: top;
+      background: #f5f5f5;
+      cursor: pointer;
+      transition: opacity 0.2s;
     }
+    .card img:hover { opacity: 0.85; }
 
     .card-body { padding: 16px; }
     .card-body h3 { font-size: 1rem; color: #ffffff; margin-bottom: 4px; }
@@ -156,8 +160,10 @@
 
       certs.forEach(cert => {
         const imgTag = cert.image_filename
-          ? `<img src="${IMAGES_API}/images/${cert.image_filename}" alt="${cert.name}" />`
-          : `<div style="height:160px;background:#111;display:flex;align-items:center;justify-content:center;color:#555;">No Image</div>`;
+          ? `<a href="${IMAGES_API}/images/${cert.image_filename}" target="_blank">
+               <img src="${IMAGES_API}/images/${cert.image_filename}" alt="${cert.name}" />
+             </a>`
+          : `<div style="height:200px;background:#111;display:flex;align-items:center;justify-content:center;color:#555;">No Image</div>`;
 
         const linkTag = cert.verification_url
           ? `<a href="${cert.verification_url}" target="_blank">Verify Certificate →</a>`
