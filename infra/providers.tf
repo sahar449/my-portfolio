@@ -2,6 +2,22 @@ provider "aws" {
   region = var.region
 }
 
+data "aws_eks_cluster" "cluster" {
+  name = var.cluster_name
+}
+
+data "aws_eks_cluster_auth" "cluster" {
+  name = var.cluster_name
+}
+
+provider "helm" {
+  kubernetes {
+    host                   = data.aws_eks_cluster.cluster.endpoint
+    cluster_ca_certificate = base64decode(data.aws_eks_cluster.cluster.certificate_authority[0].data)
+    token                  = data.aws_eks_cluster_auth.cluster.token
+  }
+}
+
 terraform {
   required_providers {
     aws = {
@@ -12,12 +28,16 @@ terraform {
       source  = "hashicorp/random"
       version = "~> 3.5"
     }
+    helm = {
+      source  = "hashicorp/helm"
+      version = "~> 2.13"
+    }
   }
 
   backend "s3" {
-    bucket = "sahar-bucketttttt"
-    key    = "test/terraform.tfstate"
-    region = "us-west-2"
-    encrypt        = true
+    bucket  = "sahar-bucketttttt"
+    key     = "test/terraform.tfstate"
+    region  = "us-west-2"
+    encrypt = true
   }
 }
