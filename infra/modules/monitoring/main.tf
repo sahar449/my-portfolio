@@ -17,10 +17,10 @@ resource "aws_identitystore_user" "grafana_admin" {
   }
 }
 
-resource "aws_grafana_workspace_user_association" "admin" {
+resource "aws_grafana_role_association" "admin" {
   workspace_id = aws_grafana_workspace.main.id
-  user_id      = aws_identitystore_user.grafana_admin.user_id
   role         = "ADMIN"
+  user_ids     = [aws_identitystore_user.grafana_admin.user_id]
 }
 
 resource "aws_prometheus_workspace" "main" {
