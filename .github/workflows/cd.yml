@@ -139,7 +139,21 @@ jobs:
           echo "ArgoCD URL: https://argocd.saharbittman.com"
           echo "ArgoCD password: $(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 --decode)"
 
-      - name: Deploy ArgoCD ApplicationSet
+      - name: Deploy eks-charts ApplicationSet (ALB controller + external-dns)
+        run: |
+          export VPC_ID=$(aws eks describe-cluster \
+            --name ${{ env.CLUSTER_NAME }} \
+            --query 'cluster.resourcesVpcConfig.vpcId' \
+            --output text)
+          export AWS_ACCOUNT_NUMBER=${{ secrets.AWS_ACCOUNT_NUMBER }}
+
+          envsubst < ArgoCD/eks-charts-applicationset.yaml | kubectl apply -f -
+
+          echo "Waiting for ALB controller to be ready..."
+          kubectl wait --for=condition=available deployment/aws-load-balancer-controller \
+            -n kube-system --timeout=5m
+
+      - name: Deploy portfolio ApplicationSet
         run: |
           export ECR_FRONTEND=${{ secrets.AWS_ACCOUNT_NUMBER }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/frontend
           export ECR_BACKEND=${{ secrets.AWS_ACCOUNT_NUMBER }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/backend
