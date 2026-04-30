@@ -1,3 +1,28 @@
+data "aws_ssoadmin_instances" "main" {}
+
+resource "aws_identitystore_user" "grafana_admin" {
+  identity_store_id = tolist(data.aws_ssoadmin_instances.main.identity_store_ids)[0]
+
+  user_name    = var.grafana_admin_username
+  display_name = var.grafana_admin_username
+
+  name {
+    given_name  = var.grafana_admin_username
+    family_name = "Admin"
+  }
+
+  emails {
+    value   = var.grafana_admin_email
+    primary = true
+  }
+}
+
+resource "aws_grafana_workspace_user_association" "admin" {
+  workspace_id = aws_grafana_workspace.main.id
+  user_id      = aws_identitystore_user.grafana_admin.user_id
+  role         = "ADMIN"
+}
+
 resource "aws_prometheus_workspace" "main" {
   alias = "${var.name_prefix}-amp"
   tags  = { Name = "${var.name_prefix}-amp" }

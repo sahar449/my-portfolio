@@ -9,3 +9,7 @@ output "amp_ingest_role_arn" {
 output "grafana_endpoint" {
   value = aws_grafana_workspace.main.endpoint
 }
+
+output "grafana_url" {
+  value = "https://${aws_grafana_workspace.main.endpoint}"
+}

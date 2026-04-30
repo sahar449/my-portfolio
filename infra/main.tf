@@ -70,10 +70,16 @@ output "amp_ingest_role_arn" {
 }
 
 module "monitoring" {
-  source              = "./modules/monitoring"
-  name_prefix         = var.name_prefix
-  region              = var.region
-  oidc_provider_arn   = module.eks.oidc_provider_arn
-  oidc_provider_url   = module.eks.oidc_provider_url
-  depends_on          = [module.eks]
+  source                 = "./modules/monitoring"
+  name_prefix            = var.name_prefix
+  region                 = var.region
+  oidc_provider_arn      = module.eks.oidc_provider_arn
+  oidc_provider_url      = module.eks.oidc_provider_url
+  grafana_admin_email    = var.grafana_admin_email
+  grafana_admin_username = var.grafana_admin_username
+  depends_on             = [module.eks]
+}
+
+output "grafana_url" {
+  value = module.monitoring.grafana_url
 }
