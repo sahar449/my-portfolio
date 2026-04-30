@@ -1,0 +1,251 @@
+name: CI Build & Test
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'services/**'
+  workflow_run:
+    workflows: ["Bootstrap Infra"]
+    types:
+      - completed
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: us-west-2
+  IMAGE_TAG: ${{ github.sha }}
+
+jobs:
+  # ============================================
+  # Job 1: TRIVY SCAN (frontend + backend in parallel)
+  # ============================================
+  trivy-scan-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify Bootstrap succeeded
+        run: |
+          CONCLUSION="${{ github.event.workflow_run.conclusion }}"
+          if [ "$CONCLUSION" != "success" ]; then
+            echo "Bootstrap workflow did not succeed (conclusion: $CONCLUSION). Stopping CI."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - name: Trivy filesystem scan — frontend
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: ./services/frontend
+          scanners: vuln,secret,config
+          format: table
+          severity: CRITICAL,HIGH,MEDIUM
+          exit-code: '0'
+
+  trivy-scan-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify Bootstrap succeeded
+        run: |
+          CONCLUSION="${{ github.event.workflow_run.conclusion }}"
+          if [ "$CONCLUSION" != "success" ]; then
+            echo "Bootstrap workflow did not succeed (conclusion: $CONCLUSION). Stopping CI."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - name: Trivy filesystem scan — backend
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: ./services/backend
+          scanners: vuln,secret,config
+          format: table
+          severity: CRITICAL,HIGH,MEDIUM
+          exit-code: '0'
+
+  # ============================================
+  # Job 2: BUILD & PUSH (frontend + backend in parallel)
+  # ============================================
+  build-frontend:
+    runs-on: ubuntu-latest
+    needs: trivy-scan-frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: github-actions-frontend
+
+      - name: Login to ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and Push frontend
+        uses: docker/build-push-action@v4
+        with:
+          context: ./services/frontend
+          push: true
+          tags: |
+            ${{ secrets.AWS_ACCOUNT_NUMBER }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/frontend:${{ env.IMAGE_TAG }}
+            ${{ secrets.AWS_ACCOUNT_NUMBER }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/frontend:latest
+
+      - name: Trivy image scan — frontend
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: image
+          image-ref: ${{ secrets.AWS_ACCOUNT_NUMBER }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/frontend:${{ env.IMAGE_TAG }}
+          scanners: vuln,secret,config
+          format: table
+          severity: CRITICAL,HIGH,MEDIUM
+          exit-code: '0'
+
+      - name: Generate SBOM — frontend
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: image
+          image-ref: ${{ secrets.AWS_ACCOUNT_NUMBER }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/frontend:${{ env.IMAGE_TAG }}
+          format: cyclonedx
+          output: sbom-frontend.cdx.json
+          exit-code: '0'
+
+      - name: Upload SBOM — frontend
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-frontend
+          path: sbom-frontend.cdx.json
+
+  build-backend:
+    runs-on: ubuntu-latest
+    needs: trivy-scan-backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: github-actions-backend
+
+      - name: Login to ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and Push backend
+        uses: docker/build-push-action@v4
+        with:
+          context: ./services/backend
+          push: true
+          tags: |
+            ${{ secrets.AWS_ACCOUNT_NUMBER }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/backend:${{ env.IMAGE_TAG }}
+            ${{ secrets.AWS_ACCOUNT_NUMBER }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/backend:latest
+
+      - name: Trivy image scan — backend
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: image
+          image-ref: ${{ secrets.AWS_ACCOUNT_NUMBER }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/backend:${{ env.IMAGE_TAG }}
+          scanners: vuln,secret,config
+          format: table
+          severity: CRITICAL,HIGH,MEDIUM
+          exit-code: '0'
+
+      - name: Generate SBOM — backend
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: image
+          image-ref: ${{ secrets.AWS_ACCOUNT_NUMBER }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/backend:${{ env.IMAGE_TAG }}
+          format: cyclonedx
+          output: sbom-backend.cdx.json
+          exit-code: '0'
+
+      - name: Upload SBOM — backend
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-backend
+          path: sbom-backend.cdx.json
+
+  # ============================================
+  # Job 3: SMOKE TEST (frontend + backend in parallel)
+  # ============================================
+  smoke-test-frontend:
+    runs-on: ubuntu-latest
+    needs: build-frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: github-actions-smoketest-frontend
+
+      - name: Login to ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Smoke Test — frontend
+        run: |
+          docker run -d --name test-frontend \
+            -p 5000:5000 \
+            ${{ secrets.AWS_ACCOUNT_NUMBER }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/frontend:${{ env.IMAGE_TAG }}
+
+          sleep 5
+
+          for i in $(seq 1 10); do
+            STATUS=$(curl -s http://localhost:5000/health | jq -r '.status' 2>/dev/null || echo "FAIL")
+            if [ "$STATUS" = "ok" ]; then
+              echo "Smoke test passed for frontend"
+              docker rm -f test-frontend
+              exit 0
+            fi
+            sleep 3
+          done
+
+          docker rm -f test-frontend
+          exit 1
+
+  smoke-test-backend:
+    runs-on: ubuntu-latest
+    needs: build-backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: github-actions-smoketest-backend
+
+      - name: Login to ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # - name: Smoke Test — backend
+      #   run: |
+      #     docker run -d --name test-backend \
+      #       -p 5002:5002 \
+      #       -e DB_HOST=localhost \
+      #       -e DB_USER=test \
+      #       -e DB_PASS=test \
+      #       -e DB_NAME=test \
+      #       ${{ secrets.AWS_ACCOUNT_NUMBER }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/backend:${{ env.IMAGE_TAG }}
+
+      #     sleep 5
+
+      #     for i in $(seq 1 10); do
+      #       STATUS=$(curl -s http://localhost:5002/health | jq -r '.status' 2>/dev/null || echo "FAIL")
+      #       if [ "$STATUS" = "ok" ]; then
+      #         echo "Smoke test passed for backend"
+      #         docker rm -f test-backend
+      #         exit 0
+      #       fi
+      #       sleep 3
+      #     done
+
+      #     docker rm -f test-backend
+      #     exit 1

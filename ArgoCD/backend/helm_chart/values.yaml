@@ -1,0 +1,47 @@
+app:
+  name: backend
+  namespace: default
+  replicas: 2
+  image:
+    repository: null
+    tag: latest
+    pullPolicy: Always
+  securityContext:
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+    seccompProfile:
+      type: RuntimeDefault
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+  nodeSelector:
+    role: backend
+
+hpa:
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 70
+
+pdb:
+  minAvailable: 1
+
+service:
+  type: ClusterIP
+  port: 5002
+  targetPort: 5002
+
+secrets:
+  serviceAccountName: flask-app-sa
+  providerClassName: rds-secret-provider
+  mountPath: /mnt/rds-secret
+  accountNumber: ""
+
+resources:
+  requests:
+    memory: 64Mi
+    cpu: 50m
+  limits:
+    memory: 128Mi
+    cpu: 100m

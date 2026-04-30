@@ -1,0 +1,48 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: portfolio
+  namespace: argocd
+spec:
+  generators:
+  - list:
+      elements:
+      - name: frontend
+        path: ArgoCD/frontend/helm_chart
+        wave: "2"
+        ecr: "${ECR_FRONTEND}"
+        accountNumber: ""
+      - name: backend
+        path: ArgoCD/backend/helm_chart
+        wave: "3"
+        ecr: "${ECR_BACKEND}"
+        accountNumber: "${AWS_ACCOUNT_NUMBER}"
+  template:
+    metadata:
+      name: "{{name}}"
+      namespace: argocd
+      annotations:
+        argocd.argoproj.io/sync-wave: "{{wave}}"
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/sahar449/my-portfolio.git
+        targetRevision: HEAD
+        path: "{{path}}"
+        helm:
+          values: |
+            app:
+              image:
+                repository: "{{ecr}}"
+                tag: latest
+            secrets:
+              accountNumber: "{{accountNumber}}"
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: default
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=false

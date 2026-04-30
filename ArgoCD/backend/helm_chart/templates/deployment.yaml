@@ -1,0 +1,74 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.app.name }}
+  namespace: {{ .Values.app.namespace }}
+spec:
+  replicas: {{ .Values.app.replicas }}
+  selector:
+    matchLabels:
+      app: {{ .Values.app.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.app.name }}
+    spec:
+      nodeSelector:
+        {{- toYaml .Values.app.nodeSelector | nindent 8 }}
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: {{ .Values.app.name }}
+      serviceAccountName: {{ .Values.secrets.serviceAccountName }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ .Values.app.securityContext.runAsUser }}
+        runAsGroup: {{ .Values.app.securityContext.runAsGroup }}
+        fsGroup: {{ .Values.app.securityContext.fsGroup }}
+        seccompProfile:
+          type: {{ .Values.app.securityContext.seccompProfile.type }}
+      containers:
+      - name: {{ .Values.app.name }}
+        image: "{{ .Values.app.image.repository }}:{{ .Values.app.image.tag }}"
+        imagePullPolicy: {{ .Values.app.image.pullPolicy }}
+        securityContext:
+          allowPrivilegeEscalation: {{ .Values.app.containerSecurityContext.allowPrivilegeEscalation }}
+          capabilities:
+            drop: {{ toYaml .Values.app.containerSecurityContext.capabilities.drop | nindent 12 }}
+        ports:
+        - containerPort: {{ .Values.service.targetPort }}
+          name: http
+        volumeMounts:
+        - name: rds-secret-vol
+          mountPath: {{ .Values.secrets.mountPath }}
+          readOnly: true
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+        startupProbe:
+          httpGet:
+            path: /health/db
+            port: http
+          failureThreshold: 20
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          periodSeconds: 15
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health/db
+            port: http
+          periodSeconds: 10
+          failureThreshold: 3
+      volumes:
+      - name: rds-secret-vol
+        csi:
+          driver: secrets-store.csi.k8s.io
+          readOnly: true
+          volumeAttributes:
+            secretProviderClass: {{ .Values.secrets.providerClassName }}
