@@ -284,39 +284,46 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
           role-session-name: github-actions-terraform-destroy
 
-      - name: Cleanup orphaned ALB resources
+      - name: Cleanup all VPC resources
         run: |
           VPC_ID=$(aws ec2 describe-vpcs \
             --filters "Name=tag:Name,Values=${{ env.VPC_NAME }}" \
             --query "Vpcs[0].VpcId" --output text)
+          echo "VPC: $VPC_ID"
 
-          echo "=== Deleting orphaned target groups ==="
+          echo "=== Load balancers ==="
+          LB_ARNS=$(aws elbv2 describe-load-balancers \
+            --query "LoadBalancers[?VpcId=='$VPC_ID'].LoadBalancerArn" --output text)
+          for arn in $LB_ARNS; do
+            echo "Deleting LB: $arn"
+            aws elbv2 delete-load-balancer --load-balancer-arn "$arn" || true
+          done
+          [ -n "$LB_ARNS" ] && sleep 15
+
+          echo "=== Target groups ==="
           TG_ARNS=$(aws elbv2 describe-target-groups \
-            --query "TargetGroups[?VpcId=='$VPC_ID'].TargetGroupArn" \
-            --output text)
+            --query "TargetGroups[?VpcId=='$VPC_ID'].TargetGroupArn" --output text)
           for arn in $TG_ARNS; do
-            echo "Deleting target group: $arn"
+            echo "Deleting TG: $arn"
             aws elbv2 delete-target-group --target-group-arn "$arn" || true
           done
 
-          echo "=== Deleting ALB-managed security groups ==="
-          SG_IDS=$(aws ec2 describe-security-groups \
+          echo "=== Non-default security groups ==="
+          SGS=$(aws ec2 describe-security-groups \
             --filters "Name=vpc-id,Values=$VPC_ID" \
-                      "Name=tag:kubernetes.io/cluster/${{ env.CLUSTER_NAME }},Values=owned" \
-            --query "SecurityGroups[].GroupId" --output text)
-          for sg in $SG_IDS; do
-            echo "Deleting security group: $sg"
+            --query "SecurityGroups[?GroupName!='default'].GroupId" --output text)
+          for sg in $SGS; do
+            echo "Deleting SG: $sg"
             aws ec2 delete-security-group --group-id "$sg" || true
           done
 
-          # Also delete by name pattern (k8s-managed SGs may not have tags)
-          K8S_SGS=$(aws ec2 describe-security-groups \
+          echo "=== Available network interfaces ==="
+          ENIS=$(aws ec2 describe-network-interfaces \
             --filters "Name=vpc-id,Values=$VPC_ID" \
-                      "Name=description,Values=[k8s]*" \
-            --query "SecurityGroups[].GroupId" --output text)
-          for sg in $K8S_SGS; do
-            echo "Deleting k8s security group: $sg"
-            aws ec2 delete-security-group --group-id "$sg" || true
+            --query "NetworkInterfaces[?Status=='available'].NetworkInterfaceId" --output text)
+          for eni in $ENIS; do
+            echo "Deleting ENI: $eni"
+            aws ec2 delete-network-interface --network-interface-id "$eni" || true
           done
 
       - name: Terraform Destroy
