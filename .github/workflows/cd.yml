@@ -214,40 +214,49 @@ jobs:
       - name: Update kubeconfig
         run: aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name ${{ env.CLUSTER_NAME }}
 
-      - name: Delete portfolio apps and ingresses
+      - name: Remove ArgoCD finalizers
         run: |
-          kubectl delete applicationset portfolio -n argocd --timeout=2m || true
-          kubectl delete applications frontend backend -n argocd --timeout=2m || true
-          kubectl delete ingress --all --all-namespaces || true
-
-          # Force remove any stuck finalizers
-          for app in frontend backend; do
-            kubectl patch application $app -n argocd \
+          for app in $(kubectl get applications -n argocd -o name 2>/dev/null); do
+            kubectl patch $app -n argocd \
               -p '{"metadata":{"finalizers":[]}}' --type=merge 2>/dev/null || true
           done
 
-      - name: Wait for ALBs to be deleted
+      - name: Delete portfolio ApplicationSet and ingresses
+        run: |
+          kubectl delete applicationset portfolio -n argocd --wait=false --ignore-not-found
+          kubectl delete ingress --all --all-namespaces --wait=false --ignore-not-found
+          kubectl delete applications frontend backend -n argocd --wait=false --ignore-not-found
+
+      - name: Wait for ALBs — force delete if needed
         run: |
           VPC_ID=$(aws ec2 describe-vpcs \
             --filters "Name=tag:Name,Values=${{ env.VPC_NAME }}" \
             --query "Vpcs[0].VpcId" --output text)
 
-          for i in $(seq 1 24); do
-            LB_COUNT=$(aws elbv2 describe-load-balancers \
-              --query "LoadBalancers[?VpcId=='$VPC_ID'] | length(@)" \
+          for i in $(seq 1 20); do
+            LB_ARNS=$(aws elbv2 describe-load-balancers \
+              --query "LoadBalancers[?VpcId=='$VPC_ID'].LoadBalancerArn" \
               --output text)
-            if [ "$LB_COUNT" = "0" ]; then
+            if [ -z "$LB_ARNS" ]; then
               echo "All ALBs deleted"
               break
             fi
-            echo "Attempt $i/24 — $LB_COUNT ALB(s) remaining..."
+            echo "Attempt $i/20 — ALBs still exist..."
+            if [ "$i" = "10" ]; then
+              echo "Force deleting remaining ALBs via AWS CLI..."
+              echo "$LB_ARNS" | tr '\t' '\n' | while read arn; do
+                aws elbv2 delete-load-balancer --load-balancer-arn "$arn" || true
+              done
+            fi
             sleep 15
           done
 
-      - name: Delete ALB controller and remaining apps
+      - name: Delete ALB controller ApplicationSet
         run: |
-          kubectl delete applicationset eks-charts-applications -n argocd --timeout=2m || true
-          kubectl delete application alb-controller -n argocd --timeout=2m || true
+          kubectl patch application alb-controller -n argocd \
+            -p '{"metadata":{"finalizers":[]}}' --type=merge 2>/dev/null || true
+          kubectl delete applicationset eks-charts-applications -n argocd \
+            --wait=false --ignore-not-found
 
       - name: Uninstall ArgoCD
         run: helm uninstall argocd -n argocd || true
