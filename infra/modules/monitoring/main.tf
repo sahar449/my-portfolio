@@ -36,63 +36,50 @@ resource "aws_grafana_role_association" "admin" {
   user_ids     = [aws_identitystore_user.grafana_admin.user_id]
 }
 
-resource "aws_grafana_workspace_api_key" "terraform" {
-  key_name        = "terraform-provisioner"
-  key_role        = "ADMIN"
-  seconds_to_live = 2592000
-  workspace_id    = aws_grafana_workspace.main.id
-}
 
-resource "terraform_data" "grafana_datasources" {
-  depends_on = [aws_grafana_workspace.main, aws_prometheus_workspace.main, aws_grafana_workspace_api_key.terraform]
-
-  triggers_replace = [
-    aws_grafana_workspace.main.id,
-    aws_prometheus_workspace.main.prometheus_endpoint,
-  ]
-
-  provisioner "local-exec" {
-    command = <<-EOT
-      GRAFANA_URL="https://${aws_grafana_workspace.main.endpoint}"
-      AUTH="${aws_grafana_workspace_api_key.terraform.key}"
-      AMP_URL="${aws_prometheus_workspace.main.prometheus_endpoint}"
-      REGION="${var.region}"
-
-      # Add Prometheus data source
-      curl -sf -X POST "$GRAFANA_URL/api/datasources" \
-        -H "Authorization: Bearer $AUTH" \
-        -H "Content-Type: application/json" \
-        -d "{
-          \"name\": \"Amazon Managed Prometheus\",
-          \"type\": \"prometheus\",
-          \"url\": \"$AMP_URL\",
-          \"access\": \"proxy\",
-          \"isDefault\": true,
-          \"jsonData\": {
-            \"httpMethod\": \"POST\",
-            \"sigV4Auth\": true,
-            \"sigV4Region\": \"$REGION\",
-            \"sigV4AuthType\": \"default\"
-          }
-        }" || echo "Datasource may already exist, skipping"
-
-      # Import EKS cluster dashboard (ID 17119 - Kubernetes / Views / Global)
-      curl -sf -X POST "$GRAFANA_URL/api/dashboards/import" \
-        -H "Authorization: Bearer $AUTH" \
-        -H "Content-Type: application/json" \
-        -d "{
-          \"dashboardId\": 17119,
-          \"overwrite\": true,
-          \"inputs\": [{
-            \"name\": \"DS_PROMETHEUS\",
-            \"type\": \"datasource\",
-            \"pluginId\": \"prometheus\",
-            \"value\": \"Amazon Managed Prometheus\"
-          }],
-          \"folderId\": 0
-        }" || echo "Dashboard import failed, will retry on next apply"
-    EOT
+resource "aws_prometheus_scraper" "eks" {
+  source {
+    eks {
+      cluster_arn = var.cluster_arn
+      subnet_ids  = var.private_subnet_ids
+    }
   }
+
+  destination {
+    amp {
+      workspace_arn = aws_prometheus_workspace.main.arn
+    }
+  }
+
+  scrape_configuration = <<-EOT
+    global:
+      scrape_interval: 30s
+    scrape_configs:
+      - job_name: kubernetes-nodes
+        scheme: https
+        kubernetes_sd_configs:
+          - role: node
+        relabel_configs:
+          - action: labelmap
+            regex: __meta_kubernetes_node_label_(.+)
+      - job_name: kubernetes-pods
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          - action: labelmap
+            regex: __meta_kubernetes_pod_label_(.+)
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+      - job_name: kube-state-metrics
+        kubernetes_sd_configs:
+          - role: service
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_service_name]
+            regex: kube-state-metrics
+            action: keep
+  EOT
 }
 
 resource "aws_prometheus_workspace" "main" {

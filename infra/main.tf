@@ -77,6 +77,8 @@ module "monitoring" {
   oidc_provider_url      = module.eks.oidc_provider_url
   grafana_admin_email    = var.grafana_admin_email
   grafana_admin_username = var.grafana_admin_username
+  cluster_arn            = module.eks.cluster_arn
+  private_subnet_ids     = module.vpc.private_subnet_ids
   depends_on             = [module.eks]
 
   providers = {

@@ -35,3 +35,7 @@ output "node_group_sg_id" {
   description = "Security Group ID for the EKS nodes"
   value       = aws_security_group.eks_nodes.id
 }
+
+output "cluster_arn" {
+  value = aws_eks_cluster.this.arn
+}
