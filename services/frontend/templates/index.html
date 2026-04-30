@@ -155,25 +155,17 @@
       color: #4f8ef7;
       margin-bottom: 14px;
     }
-    .skill-item { margin-bottom: 12px; }
-    .skill-item span {
-      display: flex;
-      justify-content: space-between;
-      font-size: 0.9rem;
+    .skill-tags { display: flex; flex-wrap: wrap; gap: 10px; }
+    .skill-tag {
+      background: #1a1f2e;
+      border: 1px solid #2a2f3e;
       color: #c0c8e0;
-      margin-bottom: 5px;
+      font-size: 0.88rem;
+      padding: 6px 14px;
+      border-radius: 8px;
+      transition: border-color 0.2s, color 0.2s;
     }
-    .skill-bar {
-      height: 6px;
-      background: #2a2f3e;
-      border-radius: 4px;
-      overflow: hidden;
-    }
-    .skill-bar-fill {
-      height: 100%;
-      border-radius: 4px;
-      background: linear-gradient(90deg, #4f8ef7, #7eb3ff);
-    }
+    .skill-tag:hover { border-color: #4f8ef7; color: #4f8ef7; }
 
     /* ── Projects ── */
     .project-card {
@@ -245,24 +237,33 @@
     <div class="skills-grid">
       <div class="skill-group">
         <h3>Cloud & Infrastructure</h3>
-        <div class="skill-item"><span><span>AWS</span></span><div class="skill-bar"><div class="skill-bar-fill" style="width:95%"></div></div></div>
-        <div class="skill-item"><span><span>Kubernetes (EKS)</span></span><div class="skill-bar"><div class="skill-bar-fill" style="width:90%"></div></div></div>
-        <div class="skill-item"><span><span>Terraform</span></span><div class="skill-bar"><div class="skill-bar-fill" style="width:90%"></div></div></div>
-        <div class="skill-item"><span><span>Helm</span></span><div class="skill-bar"><div class="skill-bar-fill" style="width:85%"></div></div></div>
+        <div class="skill-tags">
+          <span class="skill-tag">AWS</span>
+          <span class="skill-tag">Kubernetes (EKS)</span>
+          <span class="skill-tag">Terraform</span>
+          <span class="skill-tag">Helm</span>
+          <span class="skill-tag">VPC / IAM / RDS</span>
+        </div>
       </div>
       <div class="skill-group">
         <h3>CI/CD & DevSecOps</h3>
-        <div class="skill-item"><span><span>GitHub Actions</span></span><div class="skill-bar"><div class="skill-bar-fill" style="width:90%"></div></div></div>
-        <div class="skill-item"><span><span>ArgoCD</span></span><div class="skill-bar"><div class="skill-bar-fill" style="width:85%"></div></div></div>
-        <div class="skill-item"><span><span>Docker</span></span><div class="skill-bar"><div class="skill-bar-fill" style="width:90%"></div></div></div>
-        <div class="skill-item"><span><span>Trivy</span></span><div class="skill-bar"><div class="skill-bar-fill" style="width:85%"></div></div></div>
+        <div class="skill-tags">
+          <span class="skill-tag">GitHub Actions</span>
+          <span class="skill-tag">ArgoCD</span>
+          <span class="skill-tag">Docker</span>
+          <span class="skill-tag">Trivy</span>
+          <span class="skill-tag">SBOM</span>
+        </div>
       </div>
       <div class="skill-group">
         <h3>Other</h3>
-        <div class="skill-item"><span><span>Linux</span></span><div class="skill-bar"><div class="skill-bar-fill" style="width:90%"></div></div></div>
-        <div class="skill-item"><span><span>Python</span></span><div class="skill-bar"><div class="skill-bar-fill" style="width:80%"></div></div></div>
-        <div class="skill-item"><span><span>Prometheus & Grafana</span></span><div class="skill-bar"><div class="skill-bar-fill" style="width:75%"></div></div></div>
-        <div class="skill-item"><span><span>Networking & Security</span></span><div class="skill-bar"><div class="skill-bar-fill" style="width:80%"></div></div></div>
+        <div class="skill-tags">
+          <span class="skill-tag">Linux</span>
+          <span class="skill-tag">Python</span>
+          <span class="skill-tag">Prometheus</span>
+          <span class="skill-tag">Grafana</span>
+          <span class="skill-tag">Networking & Security</span>
+        </div>
       </div>
     </div>
   </div>
@@ -273,33 +274,12 @@
     <div class="cards">
       <div class="project-card">
         <h3>DevOps Portfolio — Production EKS Platform</h3>
-        <p>End-to-end production platform on AWS EKS with full GitOps pipeline. Includes Terraform IaC, ArgoCD for GitOps deployments, GitHub Actions CI/CD with Trivy security scanning, AWS Secrets Manager via CSI driver, RDS MySQL, ALB ingress, external-dns, and Amazon Managed Prometheus.</p>
+        <p>End-to-end production platform on AWS EKS with a full GitOps pipeline. Includes Terraform IaC, ArgoCD GitOps deployments, GitHub Actions CI/CD with Trivy security scanning at every stage (filesystem, image, IaC, SBOM), AWS Secrets Manager via CSI driver, RDS MySQL, ALB ingress, external-dns, and Amazon Managed Prometheus. Images are tagged with git SHA for full traceability.</p>
         <div class="tags">
           <span class="tag">EKS</span><span class="tag">Terraform</span><span class="tag">ArgoCD</span>
           <span class="tag">GitHub Actions</span><span class="tag">Trivy</span><span class="tag">Helm</span>
-          <span class="tag">RDS</span><span class="tag">Secrets Manager</span>
+          <span class="tag">RDS</span><span class="tag">Secrets Manager</span><span class="tag">Docker</span>
         </div>
-      </div>
-      <div class="project-card">
-        <h3>DevSecOps CI/CD Pipeline</h3>
-        <p>Automated CI/CD pipeline with security scanning at every stage — filesystem scan, image scan, IaC scan, and SBOM generation. Images are tagged with git SHA for full traceability and deployed via ArgoCD with sync-waves for ordered rollout.</p>
-        <div class="tags">
-          <span class="tag">GitHub Actions</span><span class="tag">Trivy</span><span class="tag">SBOM</span>
-          <span class="tag">Docker</span><span class="tag">ECR</span><span class="tag">ArgoCD</span>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Experience -->
-  <div class="section">
-    <h2>Experience</h2>
-    <div class="timeline">
-      <div class="timeline-item">
-        <div class="period">Your dates here</div>
-        <h3>Your Role</h3>
-        <div class="company">Your Company</div>
-        <p>Add your work experience here.</p>
       </div>
     </div>
   </div>
