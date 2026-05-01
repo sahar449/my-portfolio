@@ -31,7 +31,7 @@ flowchart TB
         Trivy["🔍 Trivy\nvuln · secret · config\nSBOM CycloneDX"]:::sec
     end
 
-    TF["🏗️ Terraform\nVPC · EKS · RDS · IAM\nSSL · ECR · AMP · AMG"]:::tf
+    TF["🏗️ Terraform\nVPC · EKS · RDS · IAM\nSSL · ECR · CloudWatch"]:::tf
 
     subgraph AWS["☁️ AWS — us-west-2"]
         ECR["📦 ECR\nfrontend · backend"]:::aws
@@ -56,8 +56,7 @@ flowchart TB
         end
 
         subgraph Obs["📊 Observability"]
-            AMP["📈 Amazon Managed\nPrometheus"]:::mon
-            AMG["📊 Amazon Managed\nGrafana"]:::mon
+            CW["📊 CloudWatch\nContainer Insights\nLogs · Metrics"]:::mon
         end
     end
 
@@ -74,8 +73,7 @@ flowchart TB
     ALB -->|"/api/backend"| BE
     FE -->|"internal"| BE
     BE -->|"port 3306"| RDS
-    FE & BE -->|"metrics"| AMP
-    AMP --> AMG
+    FE & BE -->|"logs · metrics"| CW
 ```
 
 ---
@@ -89,7 +87,7 @@ sequenceDiagram
     participant FE   as 🖥️ Frontend :5000
     participant BE   as ⚙️ Backend :5002
     participant RDS  as 🗄️ RDS MySQL
-    participant AMP  as 📈 Prometheus
+    participant CW   as 📊 CloudWatch
 
     User->>ALB: GET https://www.saharbittman.com
     ALB->>FE: GET / (HTTP)
@@ -111,8 +109,8 @@ sequenceDiagram
     ALB-->>User: 200 OK
 
     loop every 30s
-        AMP->>FE: scrape /metrics
-        AMP->>BE: scrape /metrics
+        CW->>FE: collect logs & metrics
+        CW->>BE: collect logs & metrics
     end
 ```
 
@@ -123,11 +121,11 @@ sequenceDiagram
 | Layer | Tools |
 |-------|-------|
 | **Cloud** | AWS EKS 1.34 · RDS MySQL · ECR · ACM · VPC |
-| **IaC** | Terraform (VPC · EKS · IAM · RDS · SSL · AMP · AMG) |
+| **IaC** | Terraform (VPC · EKS · IAM · RDS · SSL · CloudWatch) |
 | **GitOps** | ArgoCD · ApplicationSet · Helm · sync-waves |
 | **CI/CD** | GitHub Actions · matrix builds · OIDC auth |
 | **Security** | Trivy · IRSA · Secrets Manager · NetworkPolicy · seccomp |
-| **Observability** | Amazon Managed Prometheus · Amazon Managed Grafana |
+| **Observability** | CloudWatch Container Insights · CloudWatch Logs |
 | **App** | Python Flask · Docker (Alpine) · non-root UID 1000 |
 
 ---
@@ -148,12 +146,12 @@ sequenceDiagram
 │   ├── main.tf
 │   └── modules/
 │       ├── vpc/             # VPC, subnets, NAT, IGW
-│       ├── eks/             # EKS cluster + 10 managed addons + ArgoCD
+│       ├── eks/             # EKS cluster + managed addons
 │       ├── iam/             # IRSA roles (ALB, external-dns, secrets)
 │       ├── ecr/             # Container registries
 │       ├── rds/             # MySQL Multi-AZ
 │       ├── ssl/             # ACM wildcard certificate
-│       └── monitoring/      # AMP + AMG workspaces
+│       └── monitoring/      # CloudWatch Container Insights + Log Groups
 └── services/
     ├── frontend/            # Flask :5000 — HTML + images
     └── backend/             # Flask :5002 — profile + certificates from RDS
@@ -177,7 +175,7 @@ sequenceDiagram
 
 ### bootstrap.yml — Terraform
 - Trivy IaC scan (`config + secret`) on `infra/`
-- `terraform apply` → VPC, EKS, RDS, IAM, SSL, ECR, AMP, AMG, ArgoCD addon
+- `terraform apply` → VPC, EKS, RDS, IAM, SSL, ECR, CloudWatch, ArgoCD addon
 - Auto-destroys on apply failure
 
 ### ci.yml — Build & Test
@@ -221,12 +219,12 @@ sequenceDiagram
 | Module | Resources |
 |--------|----------|
 | `vpc` | VPC, public/private subnets across 2 AZs, NAT gateway, IGW |
-| `eks` | EKS 1.34, 2 node groups (public/private), 10 managed addons + ArgoCD |
+| `eks` | EKS 1.34, 2 node groups (public/private), managed addons |
 | `iam` | IRSA roles — ALB controller, external-dns, EBS CSI, secrets |
 | `ecr` | ECR repositories for frontend and backend |
 | `rds` | MySQL Multi-AZ, subnet group, security group |
 | `ssl` | ACM wildcard certificate (`*.saharbittman.com`) with DNS validation |
-| `monitoring` | AMP workspace + AMG workspace |
+| `monitoring` | CloudWatch Container Insights addon + Log Groups |
 
 ---
 

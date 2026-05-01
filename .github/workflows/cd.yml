@@ -96,46 +96,51 @@ jobs:
           EOF
 
       - name: Install ArgoCD via Helm
+        env:
+          ARGOCD_VALUES: |
+            server:
+              extraArgs:
+                - --insecure
+              service:
+                type: ClusterIP
+              ingress:
+                enabled: true
+                ingressClassName: alb
+                annotations:
+                  kubernetes.io/ingress.class: alb
+                  alb.ingress.kubernetes.io/scheme: internet-facing
+                  alb.ingress.kubernetes.io/target-type: ip
+                  alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443},{"HTTP":80}]'
+                  alb.ingress.kubernetes.io/ssl-redirect: '443'
+                  alb.ingress.kubernetes.io/healthcheck-path: /healthz
+                  alb.ingress.kubernetes.io/healthcheck-interval-seconds: '15'
+                  alb.ingress.kubernetes.io/healthy-threshold-count: '2'
+                  alb.ingress.kubernetes.io/unhealthy-threshold-count: '2'
+                  alb.ingress.kubernetes.io/tags: ManagedBy=helm,Application=argocd,Environment=production
+                  alb.ingress.kubernetes.io/load-balancer-name: argocd-alb
+                  alb.ingress.kubernetes.io/load-balancer-attributes: deletion_protection.enabled=false
+                  alb.ingress.kubernetes.io/target-group-attributes: deregistration_delay.timeout_seconds=10
+                  external-dns.alpha.kubernetes.io/hostname: argocd.saharbittman.com
+                hosts:
+                  - argocd.saharbittman.com
+                tls:
+                  - hosts:
+                      - '*.saharbittman.com'
         run: |
           helm repo add argo https://argoproj.github.io/argo-helm
           helm repo update
+          echo "$ARGOCD_VALUES" > /tmp/argocd-values.yaml
           helm upgrade --install argocd argo/argo-cd \
             --namespace argocd \
             --create-namespace \
             --version 7.8.23 \
             --wait \
             --timeout 10m \
-            -f - <<EOF
-          server:
-            extraArgs:
-              - --insecure
-            service:
-              type: ClusterIP
-            ingress:
-              enabled: true
-              ingressClassName: alb
-              annotations:
-                kubernetes.io/ingress.class: alb
-                alb.ingress.kubernetes.io/scheme: internet-facing
-                alb.ingress.kubernetes.io/target-type: ip
-                alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443},{"HTTP":80}]'
-                alb.ingress.kubernetes.io/ssl-redirect: '443'
-                alb.ingress.kubernetes.io/healthcheck-path: /healthz
-                alb.ingress.kubernetes.io/healthcheck-interval-seconds: '15'
-                alb.ingress.kubernetes.io/healthy-threshold-count: '2'
-                alb.ingress.kubernetes.io/unhealthy-threshold-count: '2'
-                alb.ingress.kubernetes.io/tags: ManagedBy=helm,Application=argocd,Environment=production
-                alb.ingress.kubernetes.io/load-balancer-name: argocd-alb
-                alb.ingress.kubernetes.io/load-balancer-attributes: deletion_protection.enabled=false
-                alb.ingress.kubernetes.io/target-group-attributes: deregistration_delay.timeout_seconds=10
-                external-dns.alpha.kubernetes.io/hostname: argocd.saharbittman.com
-              hosts:
-                - argocd.saharbittman.com
-              tls:
-                - hosts:
-                    - '*.saharbittman.com'
-          EOF
-
+            -f /tmp/argocd-values.yaml
+          kubectl patch ingress argocd-server -n argocd --type=json -p='[
+            {"op":"replace","path":"/spec/rules/0/host","value":"argocd.saharbittman.com"},
+            {"op":"replace","path":"/spec/tls/0/hosts/0","value":"*.saharbittman.com"}
+          ]' 2>/dev/null || true
           echo "ArgoCD URL: https://argocd.saharbittman.com"
           echo "ArgoCD password: $(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 --decode)"
 

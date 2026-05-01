@@ -1,10 +1,12 @@
 from flask import Flask, jsonify
+from werkzeug.middleware.proxy_fix import ProxyFix
 import pymysql
 import os
 import time
 import traceback
 
 app = Flask(__name__)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1)
 
 SECRET_PATH = "/mnt/rds-secret"
 DB_PORT = 3306
