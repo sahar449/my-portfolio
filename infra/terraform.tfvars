@@ -28,6 +28,4 @@ DB_HOST = ""
 DB_PASS=""
 secret_name = "rds-creds"
 
-grafana_admin_email    = "saharr449@gmail.com"
-grafana_admin_username = "sahar"
 

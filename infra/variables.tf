@@ -11,5 +11,3 @@ variable "DB_USER" {}
 variable "DB_HOST" {}
 variable "secret_name" {}
 variable "DB_PASS" {}
-variable "grafana_admin_email"    { type = string }
-variable "grafana_admin_username" { type = string }

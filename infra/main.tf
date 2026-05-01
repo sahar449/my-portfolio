@@ -61,32 +61,16 @@ output "ssl_cert_arn" {
   value = module.ssl.ssl_cert_arn
 }
 
-output "amp_endpoint" {
-  value = module.monitoring.amp_endpoint
-}
-
-output "amp_ingest_role_arn" {
-  value = module.monitoring.amp_ingest_role_arn
-}
-
 module "monitoring" {
-  source                 = "./modules/monitoring"
-  name_prefix            = var.name_prefix
-  region                 = var.region
-  oidc_provider_arn      = module.eks.oidc_provider_arn
-  oidc_provider_url      = module.eks.oidc_provider_url
-  grafana_admin_email    = var.grafana_admin_email
-  grafana_admin_username = var.grafana_admin_username
-  cluster_arn            = module.eks.cluster_arn
-  private_subnet_ids     = module.vpc.private_subnet_ids
-  depends_on             = [module.eks]
-
-  providers = {
-    aws     = aws
-    aws.sso = aws.sso
-  }
+  source            = "./modules/monitoring"
+  name_prefix       = var.name_prefix
+  region            = var.region
+  cluster_name      = var.cluster_name
+  oidc_provider_arn = module.eks.oidc_provider_arn
+  oidc_provider_url = module.eks.oidc_provider_url
+  depends_on        = [module.eks]
 }
 
-output "grafana_url" {
-  value = module.monitoring.grafana_url
+output "cloudwatch_url" {
+  value = module.monitoring.cloudwatch_url
 }

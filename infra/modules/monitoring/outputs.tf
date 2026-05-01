@@ -1,15 +1,11 @@
-output "amp_endpoint" {
-  value = aws_prometheus_workspace.main.prometheus_endpoint
+output "log_group_application" {
+  value = aws_cloudwatch_log_group.application.name
 }
 
-output "amp_ingest_role_arn" {
-  value = aws_iam_role.amp_ingest.arn
+output "log_group_performance" {
+  value = aws_cloudwatch_log_group.performance.name
 }
 
-output "grafana_endpoint" {
-  value = aws_grafana_workspace.main.endpoint
-}
-
-output "grafana_url" {
-  value = "https://${aws_grafana_workspace.main.endpoint}"
+output "cloudwatch_url" {
+  value = "https://${var.region}.console.aws.amazon.com/cloudwatch/home?region=${var.region}#container-insights:infrastructure"
 }
