@@ -295,6 +295,7 @@ jobs:
             --filters "Name=tag:Name,Values=${{ env.VPC_NAME }}" \
             --query "Vpcs[0].VpcId" --output text)
           echo "VPC: $VPC_ID"
+          [ -z "$VPC_ID" ] || [ "$VPC_ID" = "None" ] && echo "VPC not found, skipping" && exit 0
 
           echo "=== Load balancers ==="
           LB_ARNS=$(aws elbv2 describe-load-balancers \
@@ -303,32 +304,93 @@ jobs:
             echo "Deleting LB: $arn"
             aws elbv2 delete-load-balancer --load-balancer-arn "$arn" || true
           done
-          [ -n "$LB_ARNS" ] && sleep 15
+          [ -n "$LB_ARNS" ] && sleep 20
 
           echo "=== Target groups ==="
           TG_ARNS=$(aws elbv2 describe-target-groups \
             --query "TargetGroups[?VpcId=='$VPC_ID'].TargetGroupArn" --output text)
           for arn in $TG_ARNS; do
-            echo "Deleting TG: $arn"
             aws elbv2 delete-target-group --target-group-arn "$arn" || true
           done
 
-          echo "=== Non-default security groups ==="
+          echo "=== VPC Endpoints ==="
+          ENDPOINTS=$(aws ec2 describe-vpc-endpoints \
+            --filters "Name=vpc-id,Values=$VPC_ID" \
+            --query "VpcEndpoints[?State!='deleted'].VpcEndpointId" --output text)
+          for ep in $ENDPOINTS; do
+            echo "Deleting endpoint: $ep"
+            aws ec2 delete-vpc-endpoints --vpc-endpoint-ids "$ep" || true
+          done
+
+          echo "=== NAT Gateways ==="
+          NATS=$(aws ec2 describe-nat-gateways \
+            --filter "Name=vpc-id,Values=$VPC_ID" \
+            --query "NatGateways[?State!='deleted'].NatGatewayId" --output text)
+          for nat in $NATS; do
+            echo "Deleting NAT: $nat"
+            aws ec2 delete-nat-gateway --nat-gateway-id "$nat" || true
+          done
+          [ -n "$NATS" ] && sleep 20
+
+          echo "=== Revoke all SG rules (break circular deps) ==="
           SGS=$(aws ec2 describe-security-groups \
             --filters "Name=vpc-id,Values=$VPC_ID" \
             --query "SecurityGroups[?GroupName!='default'].GroupId" --output text)
+          for sg in $SGS; do
+            INGRESS=$(aws ec2 describe-security-groups --group-ids "$sg" \
+              --query "SecurityGroups[0].IpPermissions" --output json)
+            EGRESS=$(aws ec2 describe-security-groups --group-ids "$sg" \
+              --query "SecurityGroups[0].IpPermissionsEgress" --output json)
+            [ "$INGRESS" != "[]" ] && \
+              aws ec2 revoke-security-group-ingress --group-id "$sg" \
+                --ip-permissions "$INGRESS" 2>/dev/null || true
+            [ "$EGRESS" != "[]" ] && \
+              aws ec2 revoke-security-group-egress --group-id "$sg" \
+                --ip-permissions "$EGRESS" 2>/dev/null || true
+          done
+
+          echo "=== Delete security groups ==="
           for sg in $SGS; do
             echo "Deleting SG: $sg"
             aws ec2 delete-security-group --group-id "$sg" || true
           done
 
-          echo "=== Available network interfaces ==="
+          echo "=== Network interfaces ==="
           ENIS=$(aws ec2 describe-network-interfaces \
             --filters "Name=vpc-id,Values=$VPC_ID" \
             --query "NetworkInterfaces[?Status=='available'].NetworkInterfaceId" --output text)
           for eni in $ENIS; do
             echo "Deleting ENI: $eni"
             aws ec2 delete-network-interface --network-interface-id "$eni" || true
+          done
+
+          echo "=== Internet Gateways ==="
+          IGWS=$(aws ec2 describe-internet-gateways \
+            --filters "Name=attachment.vpc-id,Values=$VPC_ID" \
+            --query "InternetGateways[*].InternetGatewayId" --output text)
+          for igw in $IGWS; do
+            echo "Detaching and deleting IGW: $igw"
+            aws ec2 detach-internet-gateway --internet-gateway-id "$igw" --vpc-id "$VPC_ID" || true
+            aws ec2 delete-internet-gateway --internet-gateway-id "$igw" || true
+          done
+
+          echo "=== Subnets ==="
+          SUBNETS=$(aws ec2 describe-subnets \
+            --filters "Name=vpc-id,Values=$VPC_ID" \
+            --query "Subnets[*].SubnetId" --output text)
+          for subnet in $SUBNETS; do
+            echo "Deleting subnet: $subnet"
+            aws ec2 delete-subnet --subnet-id "$subnet" || true
+          done
+
+          echo "=== Route tables (non-main) ==="
+          RTS=$(aws ec2 describe-route-tables \
+            --filters "Name=vpc-id,Values=$VPC_ID" \
+            --query "RouteTables[?Associations[?Main!=\`true\`] || !Associations].RouteTableId" \
+            --output text)
+          for rt in $RTS; do
+            echo "Deleting RT: $rt"
+            aws ec2 delete-route-table --route-table-id "$rt" || true
           done
 
       - name: Terraform Destroy
