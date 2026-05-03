@@ -1,17 +1,19 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ .Values.app.name }}
+  name: {{ include "frontend.name" . }}
   namespace: {{ .Values.app.namespace }}
+  labels:
+    {{- include "frontend.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.app.replicas }}
   selector:
     matchLabels:
-      app: {{ .Values.app.name }}
+      {{- include "frontend.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        app: {{ .Values.app.name }}
+        {{- include "frontend.labels" . | nindent 8 }}
     spec:
       nodeSelector:
         {{- toYaml .Values.app.nodeSelector | nindent 8 }}
@@ -21,22 +23,15 @@ spec:
           whenUnsatisfiable: DoNotSchedule
           labelSelector:
             matchLabels:
-              app: {{ .Values.app.name }}
+              {{- include "frontend.selectorLabels" . | nindent 14 }}
       securityContext:
-        runAsNonRoot: true
-        runAsUser: {{ .Values.app.securityContext.runAsUser }}
-        runAsGroup: {{ .Values.app.securityContext.runAsGroup }}
-        fsGroup: {{ .Values.app.securityContext.fsGroup }}
-        seccompProfile:
-          type: {{ .Values.app.securityContext.seccompProfile.type }}
+        {{- include "frontend.podSecurityContext" . | nindent 8 }}
       containers:
-      - name: {{ .Values.app.name }}
-        image: "{{ .Values.app.image.repository }}:{{ .Values.app.image.tag }}"
+      - name: {{ include "frontend.name" . }}
+        image: "{{ include "frontend.image" . }}"
         imagePullPolicy: {{ .Values.app.image.pullPolicy }}
         securityContext:
-          allowPrivilegeEscalation: {{ .Values.app.containerSecurityContext.allowPrivilegeEscalation }}
-          capabilities:
-            drop: {{ toYaml .Values.app.containerSecurityContext.capabilities.drop | nindent 12 }}
+          {{- include "frontend.containerSecurityContext" . | nindent 10 }}
         ports:
         - containerPort: {{ .Values.service.targetPort }}
           name: http
