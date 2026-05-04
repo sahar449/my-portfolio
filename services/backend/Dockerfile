@@ -12,7 +12,7 @@ USER appuser
 
 EXPOSE 5002
 
-# HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
-#   CMD wget -qO- http://localhost:5002/health/db || exit 1
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+  CMD wget -qO- http://localhost:5002/health || exit 1
 
 CMD ["python", "app.py"]

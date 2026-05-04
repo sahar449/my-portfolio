@@ -32,17 +32,8 @@ jobs:
     runs-on: ubuntu-latest
     if: |
       (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply') ||
-      github.event_name == 'workflow_run'
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
     steps:
-      - name: Verify CI succeeded
-        if: github.event_name == 'workflow_run'
-        run: |
-          CONCLUSION="${{ github.event.workflow_run.conclusion }}"
-          if [ "$CONCLUSION" != "success" ]; then
-            echo "CI workflow did not succeed (conclusion: $CONCLUSION). Stopping CD."
-            exit 1
-          fi
-
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -96,47 +87,16 @@ jobs:
           EOF
 
       - name: Install ArgoCD via Helm
-        env:
-          ARGOCD_VALUES: |
-            server:
-              extraArgs:
-                - --insecure
-              service:
-                type: ClusterIP
-              ingress:
-                enabled: true
-                ingressClassName: alb
-                annotations:
-                  kubernetes.io/ingress.class: alb
-                  alb.ingress.kubernetes.io/scheme: internet-facing
-                  alb.ingress.kubernetes.io/target-type: ip
-                  alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443},{"HTTP":80}]'
-                  alb.ingress.kubernetes.io/ssl-redirect: '443'
-                  alb.ingress.kubernetes.io/healthcheck-path: /healthz
-                  alb.ingress.kubernetes.io/healthcheck-interval-seconds: '15'
-                  alb.ingress.kubernetes.io/healthy-threshold-count: '2'
-                  alb.ingress.kubernetes.io/unhealthy-threshold-count: '2'
-                  alb.ingress.kubernetes.io/tags: ManagedBy=helm,Application=argocd,Environment=production
-                  alb.ingress.kubernetes.io/load-balancer-name: argocd-alb
-                  alb.ingress.kubernetes.io/load-balancer-attributes: deletion_protection.enabled=false
-                  alb.ingress.kubernetes.io/target-group-attributes: deregistration_delay.timeout_seconds=10
-                  external-dns.alpha.kubernetes.io/hostname: argocd.saharbittman.com
-                hosts:
-                  - argocd.saharbittman.com
-                tls:
-                  - hosts:
-                      - '*.saharbittman.com'
         run: |
           helm repo add argo https://argoproj.github.io/argo-helm
           helm repo update
-          echo "$ARGOCD_VALUES" > /tmp/argocd-values.yaml
           helm upgrade --install argocd argo/argo-cd \
             --namespace argocd \
             --create-namespace \
             --version 7.8.23 \
             --wait \
             --timeout 10m \
-            -f /tmp/argocd-values.yaml
+            -f ArgoCD/argocd-values.yaml
           kubectl patch ingress argocd-server -n argocd --type=json -p='[
             {"op":"replace","path":"/spec/rules/0/host","value":"argocd.saharbittman.com"},
             {"op":"replace","path":"/spec/tls/0/hosts/0","value":"*.saharbittman.com"}
@@ -144,7 +104,7 @@ jobs:
           echo "ArgoCD URL: https://argocd.saharbittman.com"
           echo "ArgoCD password: $(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 --decode)"
 
-      - name: Deploy eks-charts ApplicationSet (ALB controller + external-dns)
+      - name: Deploy eks-charts ApplicationSet
         run: |
           export VPC_ID=$(aws eks describe-cluster \
             --name ${{ env.CLUSTER_NAME }} \
@@ -185,19 +145,11 @@ jobs:
           kubectl get applications -n argocd
 
       - name: Smoke Test
-        run: |
-          URL="https://www.saharbittman.com/health"
-          for i in {1..30}; do
-            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$URL" 2>/dev/null || echo "000")
-            if [ "$HTTP_CODE" = "200" ]; then
-              echo "App is live"
-              exit 0
-            fi
-            echo "Attempt $i/30 - HTTP: $HTTP_CODE"
-            sleep 30
-          done
-          echo "Smoke test failed"
-          exit 1
+        uses: jtalk/url-health-check-action@v4
+        with:
+          url: https://www.saharbittman.com/health
+          max-attempts: 30
+          retry-delay: 30s
 
   # ============================================
   # Job 2: DESTROY

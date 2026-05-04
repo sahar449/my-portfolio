@@ -7,28 +7,26 @@ Personal portfolio deployed as two Flask microservices on Amazon EKS, with full 
 ## Architecture
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': {'fontSize': '14px'}}}%%
 flowchart TB
-    classDef aws    fill:#FF9900,stroke:#232F3E,color:#000,font-weight:bold
-    classDef k8s    fill:#326CE5,stroke:#1a4fa8,color:#fff,font-weight:bold
-    classDef gh     fill:#24292e,stroke:#555,color:#fff,font-weight:bold
-    classDef sec    fill:#c0392b,stroke:#922b21,color:#fff,font-weight:bold
-    classDef mon    fill:#e67e22,stroke:#ca6f1e,color:#fff,font-weight:bold
-    classDef tf     fill:#7B42BC,stroke:#5a2d8a,color:#fff,font-weight:bold
-    classDef user   fill:#27ae60,stroke:#1e8449,color:#fff,font-weight:bold
+    classDef aws  fill:#FF9900,stroke:#232F3E,stroke-width:2px,color:#000,font-weight:bold
+    classDef k8s  fill:#326CE5,stroke:#1E4DB7,stroke-width:2px,color:#fff,font-weight:bold
+    classDef gh   fill:#161b22,stroke:#30363d,stroke-width:2px,color:#fff,font-weight:bold
+    classDef tf   fill:#7B42BC,stroke:#5a2d8a,stroke-width:2px,color:#fff,font-weight:bold
+    classDef mon  fill:#E6522C,stroke:#bf3a1a,stroke-width:2px,color:#fff,font-weight:bold
+    classDef user fill:#00a86b,stroke:#007a4d,stroke-width:2px,color:#fff,font-weight:bold
 
     User(["👤 User\nwww.saharbittman.com"]):::user
 
     subgraph GH["🐙 GitHub"]
-        direction TB
         Repo["📁 my-portfolio"]:::gh
-        subgraph Actions["⚙️ GitHub Actions"]
+        subgraph Pipeline["⚙️ GitHub Actions"]
             direction LR
-            BS["🏗️ bootstrap.yml\nTerraform"]:::gh
-            CI["🔨 ci.yml\nBuild · Trivy · Push"]:::gh
-            CD["🚀 cd.yml\nDeploy"]:::gh
+            BS["🏗️ bootstrap.yml\nTerraform · Trivy IaC"]:::gh
+            CI["🔨 ci.yml\nTrivy · Build · SBOM · Push"]:::gh
+            CD["🚀 cd.yml\nTrivy · ArgoCD · Smoke Test"]:::gh
             BS --> CI --> CD
         end
-        Trivy["🔍 Trivy\nvuln · secret · config\nSBOM CycloneDX"]:::sec
     end
 
     TF["🏗️ Terraform\nVPC · EKS · RDS · IAM\nSSL · ECR · CloudWatch"]:::tf
@@ -36,6 +34,7 @@ flowchart TB
     subgraph AWS["☁️ AWS — us-west-2"]
         ECR["📦 ECR\nfrontend · backend"]:::aws
         ACM["🔒 ACM\n*.saharbittman.com"]:::aws
+        CW["📊 CloudWatch\nContainer Insights · Logs"]:::mon
 
         subgraph VPC["🌐 VPC"]
             ALB["⚖️ ALB\nHTTPS · SSL Redirect"]:::aws
@@ -54,16 +53,19 @@ flowchart TB
 
             RDS[("🗄️ RDS MySQL\nMulti-AZ")]:::aws
         end
-
-        subgraph Obs["📊 Observability"]
-            CW["📊 CloudWatch\nContainer Insights\nLogs · Metrics"]:::mon
-        end
     end
 
-    Repo --> Actions
+    style GH       fill:#0d1117,stroke:#30363d,color:#fff
+    style Pipeline fill:#161b22,stroke:#21262d,color:#c9d1d9
+    style AWS      fill:#fffbf0,stroke:#FF9900,color:#232F3E
+    style VPC      fill:#fff8e6,stroke:#e67e22,color:#232F3E
+    style EKS      fill:#eff6ff,stroke:#326CE5,color:#1E4DB7
+    style PubNodes fill:#f0fdf4,stroke:#16a34a,color:#15803d
+    style PrvNodes fill:#fff1f2,stroke:#e11d48,color:#be123c
+
+    Repo --> Pipeline
     BS --> TF
-    CI --> Trivy
-    CI -->|"docker push :sha"| ECR
+    CI -->|"push :sha"| ECR
     CD -->|"ApplicationSet"| ArgoCD
     ArgoCD -->|"Helm sync"| FE & BE
     FE & BE -.->|"pull image"| ECR
@@ -72,8 +74,8 @@ flowchart TB
     ALB -->|"/"| FE
     ALB -->|"/api/backend"| BE
     FE -->|"internal"| BE
-    BE -->|"port 3306"| RDS
-    FE & BE -->|"logs · metrics"| CW
+    BE -->|"3306"| RDS
+    FE & BE -.->|"logs · metrics"| CW
 ```
 
 ---
@@ -81,37 +83,29 @@ flowchart TB
 ## Request Trace
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': {'fontSize': '14px', 'actorBkg': '#326CE5', 'actorTextColor': '#fff', 'actorBorderColor': '#1E4DB7', 'activationBkgColor': '#eff6ff', 'signalColor': '#555', 'signalTextColor': '#333', 'noteBkgColor': '#fffbf0', 'noteTextColor': '#232F3E'}}}%%
 sequenceDiagram
-    actor User
-    participant ALB  as ⚖️ ALB
-    participant FE   as 🖥️ Frontend :5000
-    participant BE   as ⚙️ Backend :5002
-    participant RDS  as 🗄️ RDS MySQL
-    participant CW   as 📊 CloudWatch
+    actor User as 👤 User
+    participant ALB as ⚖️ ALB
+    participant FE  as 🖥️ Frontend
+    participant BE  as ⚙️ Backend
+    participant RDS as 🗄️ RDS
 
     User->>ALB: GET https://www.saharbittman.com
-    ALB->>FE: GET / (HTTP)
-    FE-->>ALB: 200 HTML + images
-    ALB-->>User: 200 OK
+    ALB->>FE: GET /
+    FE-->>User: 200 HTML + images
 
     User->>ALB: GET /api/backend/profile
     ALB->>BE: GET /profile
     BE->>RDS: SELECT * FROM profile
     RDS-->>BE: row data
-    BE-->>ALB: 200 JSON
-    ALB-->>User: 200 OK
+    BE-->>User: 200 JSON
 
     User->>ALB: GET /api/backend/certificates
     ALB->>BE: GET /certificates
     BE->>RDS: SELECT * FROM certificates
     RDS-->>BE: rows
-    BE-->>ALB: 200 JSON
-    ALB-->>User: 200 OK
-
-    loop every 30s
-        CW->>FE: collect logs & metrics
-        CW->>BE: collect logs & metrics
-    end
+    BE-->>User: 200 JSON
 ```
 
 ---

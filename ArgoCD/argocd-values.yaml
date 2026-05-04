@@ -1,0 +1,28 @@
+server:
+  extraArgs:
+    - --insecure
+  service:
+    type: ClusterIP
+  ingress:
+    enabled: true
+    ingressClassName: alb
+    annotations:
+      kubernetes.io/ingress.class: alb
+      alb.ingress.kubernetes.io/scheme: internet-facing
+      alb.ingress.kubernetes.io/target-type: ip
+      alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443},{"HTTP":80}]'
+      alb.ingress.kubernetes.io/ssl-redirect: '443'
+      alb.ingress.kubernetes.io/healthcheck-path: /healthz
+      alb.ingress.kubernetes.io/healthcheck-interval-seconds: '15'
+      alb.ingress.kubernetes.io/healthy-threshold-count: '2'
+      alb.ingress.kubernetes.io/unhealthy-threshold-count: '2'
+      alb.ingress.kubernetes.io/tags: ManagedBy=helm,Application=argocd,Environment=production
+      alb.ingress.kubernetes.io/load-balancer-name: argocd-alb
+      alb.ingress.kubernetes.io/load-balancer-attributes: deletion_protection.enabled=false
+      alb.ingress.kubernetes.io/target-group-attributes: deregistration_delay.timeout_seconds=10
+      external-dns.alpha.kubernetes.io/hostname: argocd.saharbittman.com
+    hosts:
+      - argocd.saharbittman.com
+    tls:
+      - hosts:
+          - '*.saharbittman.com'
