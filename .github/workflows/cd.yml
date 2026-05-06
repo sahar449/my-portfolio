@@ -122,6 +122,10 @@ jobs:
             https://github.com/mikefarah/yq/releases/download/v4.44.1/yq_linux_amd64
           chmod +x /usr/local/bin/yq
 
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git pull --rebase
+
           yq e ".spec.generators[0].list.elements[0].irsaRoleArn = \"${IRSA_ARN}\"" \
             -i ArgoCD/apps/alb-ingress-controller-applicationset.yaml
           yq e ".spec.generators[0].list.elements[0].vpcId = \"${VPC_ID}\"" \
@@ -139,13 +143,10 @@ jobs:
           yq e ".app.image.tag = \"${IMAGE_TAG}\"" \
             -i ArgoCD/backend/helm_chart/values.yaml
 
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git config user.name "github-actions[bot]"
           git add ArgoCD/apps/alb-ingress-controller-applicationset.yaml \
                   ArgoCD/frontend/helm_chart/values.yaml \
                   ArgoCD/backend/helm_chart/values.yaml
           git diff --staged --quiet || git commit -m "ci: update image tag ${IMAGE_TAG}"
-          git pull --rebase
           git push
 
       - name: Apply root Application
