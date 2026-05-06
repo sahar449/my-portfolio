@@ -1,0 +1,27 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "backend.name" . }}-pre-sync-check
+  namespace: {{ .Values.app.namespace }}
+  annotations:
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+spec:
+  ttlSecondsAfterFinished: 60
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: db-check
+        image: busybox
+        command:
+          - sh
+          - -c
+          - '[ -z "$DB_HOST" ] || nc -z -w10 "$DB_HOST" 3306'
+        env:
+        - name: DB_HOST
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.secrets.k8sSecretName }}
+              key: host
+              optional: true
