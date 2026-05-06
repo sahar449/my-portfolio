@@ -3,7 +3,7 @@ app:
   namespace: default
   replicas: 2
   image:
-    repository: "placeholder/backend"
+    repository: "/backend"
     tag: 025789c21344948277bf03e193f509f0645ab1c3
     pullPolicy: Always
   securityContext:
