@@ -114,8 +114,8 @@ jobs:
             --output text)
           ACCOUNT=${{ secrets.AWS_ACCOUNT_NUMBER }}
           IMAGE_TAG=${{ github.event.workflow_run.head_sha || github.sha }}
-          ECR_FRONTEND="${ACCOUNT}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/frontend"
-          ECR_BACKEND="${ACCOUNT}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/backend"
+          ECR_FRONTEND="${{ secrets.ECR_NAME }}/frontend"
+          ECR_BACKEND="${{ secrets.ECR_NAME }}/backend"
           IRSA_ARN="arn:aws:iam::${ACCOUNT}:role/eks-lb-controller-role"
 
           wget -qO /usr/local/bin/yq \
