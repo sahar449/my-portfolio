@@ -15,9 +15,9 @@ spec:
       labels:
         {{- include "backend.labels" . | nindent 8 }}
       annotations:
-        instrumentation.opentelemetry.io/inject-java: "false"
-        instrumentation.opentelemetry.io/inject-nodejs: "false"
-        instrumentation.opentelemetry.io/inject-python: "false"
+        instrumentation.opentelemetry.io/inject-java: "false" # for cloudwatch agent
+        instrumentation.opentelemetry.io/inject-nodejs: "false" # for cloudwatch agent
+        instrumentation.opentelemetry.io/inject-python: "false" # for cloudwatch agent
     spec:
       nodeSelector:
         {{- toYaml .Values.app.nodeSelector | nindent 8 }}

@@ -57,9 +57,6 @@ module "rds" {
   cidr_blocks = module.vpc.cidr_blocks
 }
 
-output "ssl_cert_arn" {
-  value = module.ssl.ssl_cert_arn
-}
 
 module "monitoring" {
   source            = "./modules/monitoring"
@@ -71,6 +68,3 @@ module "monitoring" {
   depends_on        = [module.eks]
 }
 
-output "cloudwatch_url" {
-  value = module.monitoring.cloudwatch_url
-}

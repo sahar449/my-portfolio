@@ -1,0 +1,25 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "frontend.name" . }}-post-sync-check
+  namespace: {{ .Values.app.namespace }}
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+spec:
+  ttlSecondsAfterFinished: 60
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: health-check
+        image: curlimages/curl:latest
+        command:
+          - curl
+          - -sf
+          - --retry
+          - "3"
+          - --retry-delay
+          - "15"
+          - --retry-connrefused
+          - http://{{ include "frontend.name" . }}:{{ .Values.service.targetPort }}/health

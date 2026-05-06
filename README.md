@@ -78,35 +78,6 @@ flowchart TB
     FE & BE -.->|"logs · metrics"| CW
 ```
 
----
-
-## Request Trace
-
-```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'fontSize': '14px', 'actorBkg': '#326CE5', 'actorTextColor': '#fff', 'actorBorderColor': '#1E4DB7', 'activationBkgColor': '#eff6ff', 'signalColor': '#555', 'signalTextColor': '#333', 'noteBkgColor': '#fffbf0', 'noteTextColor': '#232F3E'}}}%%
-sequenceDiagram
-    actor User as 👤 User
-    participant ALB as ⚖️ ALB
-    participant FE  as 🖥️ Frontend
-    participant BE  as ⚙️ Backend
-    participant RDS as 🗄️ RDS
-
-    User->>ALB: GET https://www.saharbittman.com
-    ALB->>FE: GET /
-    FE-->>User: 200 HTML + images
-
-    User->>ALB: GET /api/backend/profile
-    ALB->>BE: GET /profile
-    BE->>RDS: SELECT * FROM profile
-    RDS-->>BE: row data
-    BE-->>User: 200 JSON
-
-    User->>ALB: GET /api/backend/certificates
-    ALB->>BE: GET /certificates
-    BE->>RDS: SELECT * FROM certificates
-    RDS-->>BE: rows
-    BE-->>User: 200 JSON
-```
 
 ---
 
