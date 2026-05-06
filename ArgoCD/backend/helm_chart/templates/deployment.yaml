@@ -44,6 +44,29 @@ spec:
         - name: rds-secret-vol
           mountPath: {{ .Values.secrets.mountPath }}
           readOnly: true
+        env:
+        - name: DB_HOST
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.secrets.k8sSecretName }}
+              key: host
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.secrets.k8sSecretName }}
+              key: username
+        - name: DB_PASS
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.secrets.k8sSecretName }}
+              key: password
+        - name: DB_NAME
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.secrets.k8sSecretName }}
+              key: dbname
+        - name: DB_PORT
+          value: "3306"
         resources:
           {{- toYaml .Values.resources | nindent 10 }}
         startupProbe:

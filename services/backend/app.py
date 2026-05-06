@@ -2,48 +2,28 @@ from flask import Flask, jsonify
 from werkzeug.middleware.proxy_fix import ProxyFix
 import pymysql
 import os
-import time
 import traceback
 
 app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1)
 
-SECRET_PATH = "/mnt/rds-secret"
-DB_PORT = 3306
-DB_HOST = DB_USER = DB_PASS = DB_NAME = None
-
-
-def wait_for_secrets(timeout=60):
-    required = ["host", "username", "password", "dbname"]
-    start = time.time()
-    while time.time() - start < timeout:
-        if all(os.path.exists(os.path.join(SECRET_PATH, f)) for f in required):
-            return True
-        print(f"Waiting for secrets... ({int(time.time() - start)}s)")
-        time.sleep(2)
-    raise FileNotFoundError(f"Secrets not found in {SECRET_PATH} after {timeout}s")
+DB_HOST = os.environ.get("DB_HOST")
+DB_USER = os.environ.get("DB_USER")
+DB_PASS = os.environ.get("DB_PASS")
+DB_NAME = os.environ.get("DB_NAME")
+DB_PORT = int(os.environ.get("DB_PORT", 3306))
 
 
 def init_with_db():
-    global DB_HOST, DB_USER, DB_PASS, DB_NAME
-    if not os.path.exists(SECRET_PATH):
-        print("Secret path not found - running without DB")
+    if not all([DB_HOST, DB_USER, DB_PASS, DB_NAME]):
+        print("DB env vars not set - running without DB")
         return False
     try:
-        wait_for_secrets()
-        DB_HOST = open(os.path.join(SECRET_PATH, "host")).read().strip()
-        DB_USER = open(os.path.join(SECRET_PATH, "username")).read().strip()
-        DB_PASS = open(os.path.join(SECRET_PATH, "password")).read().strip()
-        DB_NAME = open(os.path.join(SECRET_PATH, "dbname")).read().strip()
         print(f"Connecting to RDS: {DB_USER}@{DB_HOST}/{DB_NAME}")
-        try:
-            init_db()
-        except Exception as e:
-            print(f"DB init failed: {e}")
-            traceback.print_exc()
+        init_db()
         return True
     except Exception as e:
-        print(f"Failed to initialize DB: {e}")
+        print(f"DB init failed: {e}")
         traceback.print_exc()
         return False
 
@@ -174,4 +154,4 @@ def certificates():
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5002, debug=True)
+    app.run(host="0.0.0.0", port=5002, debug=False)

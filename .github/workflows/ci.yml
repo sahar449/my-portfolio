@@ -184,11 +184,20 @@ jobs:
           docker run -d --name test-frontend -p 5000:5000 \
             ${{ secrets.AWS_ACCOUNT_NUMBER }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/frontend:${{ env.IMAGE_TAG }}
 
+      - name: Wait for frontend to be ready
+        run: |
+          for i in $(seq 1 15); do
+            curl -sf http://localhost:5000/health && break
+            echo "Attempt $i/15 — not ready yet"
+            [ "$i" -eq 15 ] && docker logs test-frontend && exit 1
+            sleep 2
+          done
+
       - name: Smoke Test — frontend
         uses: jtalk/url-health-check-action@v4
         with:
           url: http://localhost:5000/health
-          max-attempts: 10
+          max-attempts: 3
           retry-delay: 3s
 
       - name: Cleanup frontend container
@@ -215,11 +224,20 @@ jobs:
           docker run -d --name test-backend -p 5002:5002 \
             ${{ secrets.AWS_ACCOUNT_NUMBER }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/backend:${{ env.IMAGE_TAG }}
 
+      - name: Wait for backend to be ready
+        run: |
+          for i in $(seq 1 15); do
+            curl -sf http://localhost:5002/health && break
+            echo "Attempt $i/15 — not ready yet"
+            [ "$i" -eq 15 ] && docker logs test-backend && exit 1
+            sleep 2
+          done
+
       - name: Smoke Test — backend
         uses: jtalk/url-health-check-action@v4
         with:
           url: http://localhost:5002/health
-          max-attempts: 10
+          max-attempts: 3
           retry-delay: 3s
 
       - name: Cleanup backend container
