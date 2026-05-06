@@ -3,8 +3,8 @@ app:
   namespace: default
   replicas: 2
   image:
-    repository: ""
-    tag: latest
+    repository: "634647866665.dkr.ecr.us-west-2.amazonaws.com/backend"
+    tag: 025789c21344948277bf03e193f509f0645ab1c3
     pullPolicy: Always
   securityContext:
     runAsUser: 1000
@@ -18,27 +18,22 @@ app:
       drop: ["ALL"]
   nodeSelector:
     role: backend
-
 hpa:
   minReplicas: 2
   maxReplicas: 5
   targetCPUUtilizationPercentage: 70
-
 pdb:
   minAvailable: 1
-
 service:
   type: ClusterIP
   port: 5002
   targetPort: 5002
-
 secrets:
   serviceAccountName: flask-app-sa
   providerClassName: rds-secret-provider
   mountPath: /mnt/rds-secret
-  accountNumber: ""
+  accountNumber: "634647866665"
   k8sSecretName: rds-credentials
-
 resources:
   requests:
     memory: 64Mi

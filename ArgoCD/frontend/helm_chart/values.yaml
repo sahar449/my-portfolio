@@ -3,8 +3,8 @@ app:
   namespace: default
   replicas: 2
   image:
-    repository: ""
-    tag: latest
+    repository: "634647866665.dkr.ecr.us-west-2.amazonaws.com/frontend"
+    tag: 025789c21344948277bf03e193f509f0645ab1c3
     pullPolicy: Always
   securityContext:
     runAsUser: 1000
@@ -18,20 +18,16 @@ app:
       drop: ["ALL"]
   nodeSelector:
     role: frontend
-
 hpa:
   minReplicas: 2
   maxReplicas: 5
   targetCPUUtilizationPercentage: 70
-
 pdb:
   minAvailable: 1
-
 service:
   type: ClusterIP
   port: 5000
   targetPort: 5000
-
 resources:
   requests:
     memory: 64Mi
@@ -39,7 +35,6 @@ resources:
   limits:
     memory: 128Mi
     cpu: 100m
-
 ingress:
   enabled: true
   className: alb
