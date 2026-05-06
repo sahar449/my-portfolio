@@ -152,7 +152,14 @@ resource "aws_eks_addon" "secrets_store_csi_provider" {
   cluster_name  = aws_eks_cluster.this.name
   addon_name    = "aws-secrets-store-csi-driver-provider"
   addon_version = "v3.0.0-eksbuild.1"
-  depends_on    = [aws_eks_node_group.backend_nodes, aws_eks_node_group.frontend_nodes]
+  configuration_values = jsonencode({
+    secrets-store-csi-driver = {
+      syncSecret = {
+        enabled = true
+      }
+    }
+  })
+  depends_on = [aws_eks_node_group.backend_nodes, aws_eks_node_group.frontend_nodes]
 }
 
 
