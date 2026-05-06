@@ -3,7 +3,7 @@ app:
   namespace: default
   replicas: 2
   image:
-    repository: null
+    repository: ""
     tag: latest
     pullPolicy: Always
   securityContext:

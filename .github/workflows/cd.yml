@@ -17,7 +17,7 @@ on:
 
 permissions:
   id-token: write
-  contents: read
+  contents: write
 
 env:
   AWS_REGION: us-west-2
@@ -59,6 +59,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          token: ${{ github.token }}
 
       - name: Configure AWS
         uses: aws-actions/configure-aws-credentials@v4
@@ -96,7 +98,7 @@ jobs:
             --version 7.8.23 \
             --wait \
             --timeout 10m \
-            -f ArgoCD/argocd-values.yaml
+            -f ArgoCD/argocd-server-values.yaml
           kubectl patch ingress argocd-server -n argocd --type=json -p='[
             {"op":"replace","path":"/spec/rules/0/host","value":"argocd.saharbittman.com"},
             {"op":"replace","path":"/spec/tls/0/hosts/0","value":"*.saharbittman.com"}
@@ -104,45 +106,68 @@ jobs:
           echo "ArgoCD URL: https://argocd.saharbittman.com"
           echo "ArgoCD password: $(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 --decode)"
 
-      - name: Deploy ALB Ingress Controller ApplicationSet
+      - name: Update cluster values in Git
         run: |
-          export VPC_ID=$(aws eks describe-cluster \
+          VPC_ID=$(aws eks describe-cluster \
             --name ${{ env.CLUSTER_NAME }} \
             --query 'cluster.resourcesVpcConfig.vpcId' \
             --output text)
-          export AWS_ACCOUNT_NUMBER=${{ secrets.AWS_ACCOUNT_NUMBER }}
+          ACCOUNT=${{ secrets.AWS_ACCOUNT_NUMBER }}
+          IMAGE_TAG=${{ github.event.workflow_run.head_sha || github.sha }}
+          ECR_FRONTEND="${ACCOUNT}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/frontend"
+          ECR_BACKEND="${ACCOUNT}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/backend"
+          IRSA_ARN="arn:aws:iam::${ACCOUNT}:role/eks-lb-controller-role"
 
-          envsubst < ArgoCD/alb-ingress-controller-applicationset.yaml | kubectl apply -f -
+          wget -qO /usr/local/bin/yq \
+            https://github.com/mikefarah/yq/releases/download/v4.44.1/yq_linux_amd64
+          chmod +x /usr/local/bin/yq
 
-          echo "Waiting for ArgoCD to sync alb-controller application..."
-          for i in $(seq 1 30); do
-            HEALTH=$(kubectl get application alb-controller -n argocd \
+          yq e ".spec.generators[0].list.elements[0].irsaRoleArn = \"${IRSA_ARN}\"" \
+            -i ArgoCD/apps/alb-ingress-controller-applicationset.yaml
+          yq e ".spec.generators[0].list.elements[0].vpcId = \"${VPC_ID}\"" \
+            -i ArgoCD/apps/alb-ingress-controller-applicationset.yaml
+
+          yq e ".app.image.repository = \"${ECR_FRONTEND}\"" \
+            -i ArgoCD/frontend/helm_chart/values.yaml
+          yq e ".app.image.tag = \"${IMAGE_TAG}\"" \
+            -i ArgoCD/frontend/helm_chart/values.yaml
+
+          yq e ".app.image.repository = \"${ECR_BACKEND}\"" \
+            -i ArgoCD/backend/helm_chart/values.yaml
+          yq e ".app.image.tag = \"${IMAGE_TAG}\"" \
+            -i ArgoCD/backend/helm_chart/values.yaml
+          yq e ".secrets.accountNumber = \"${ACCOUNT}\"" \
+            -i ArgoCD/backend/helm_chart/values.yaml
+
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git add ArgoCD/apps/alb-ingress-controller-applicationset.yaml \
+                  ArgoCD/frontend/helm_chart/values.yaml \
+                  ArgoCD/backend/helm_chart/values.yaml
+          git diff --staged --quiet || git commit -m "ci: update image tag ${IMAGE_TAG}"
+          git push
+
+      - name: Apply root Application
+        run: kubectl apply -f ArgoCD/root-app.yaml
+
+      - name: Wait for all applications
+        run: |
+          for i in $(seq 1 40); do
+            ALB=$(kubectl get application alb-controller -n argocd \
               -o jsonpath='{.status.health.status}' 2>/dev/null || echo "NotFound")
-            SYNC=$(kubectl get application alb-controller -n argocd \
-              -o jsonpath='{.status.sync.status}' 2>/dev/null || echo "NotFound")
-            echo "Attempt $i/30 — health: $HEALTH, sync: $SYNC"
-            if [ "$HEALTH" = "Healthy" ] && [ "$SYNC" = "Synced" ]; then
-              echo "ALB controller is healthy and synced"
+            FRONTEND=$(kubectl get application frontend -n argocd \
+              -o jsonpath='{.status.health.status}' 2>/dev/null || echo "NotFound")
+            BACKEND=$(kubectl get application backend -n argocd \
+              -o jsonpath='{.status.health.status}' 2>/dev/null || echo "NotFound")
+            echo "Attempt $i/40 — alb: $ALB, frontend: $FRONTEND, backend: $BACKEND"
+            if [ "$ALB" = "Healthy" ] && [ "$FRONTEND" = "Healthy" ] && [ "$BACKEND" = "Healthy" ]; then
+              echo "All applications are healthy"
+              kubectl get applications -n argocd
               break
             fi
-            if [ "$i" = "30" ]; then
-              echo "Timeout waiting for alb-controller to be healthy"
-              exit 1
-            fi
+            [ "$i" -eq 40 ] && echo "Timeout waiting for applications" && exit 1
             sleep 15
           done
-
-      - name: Deploy portfolio ApplicationSet
-        run: |
-          export ECR_FRONTEND=${{ secrets.AWS_ACCOUNT_NUMBER }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/frontend
-          export ECR_BACKEND=${{ secrets.AWS_ACCOUNT_NUMBER }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/backend
-          export AWS_ACCOUNT_NUMBER=${{ secrets.AWS_ACCOUNT_NUMBER }}
-          export IMAGE_TAG=${{ github.event.workflow_run.head_sha || github.sha }}
-
-          envsubst < ArgoCD/applicationset.yaml | kubectl apply -f -
-
-          echo "ArgoCD Applications:"
-          kubectl get applications -n argocd
 
       - name: Smoke Test
         uses: jtalk/url-health-check-action@v4
@@ -171,18 +196,16 @@ jobs:
       - name: Update kubeconfig
         run: aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name ${{ env.CLUSTER_NAME }}
 
-      - name: Remove ArgoCD finalizers
+      - name: Remove ArgoCD finalizers and delete root Application
         run: |
           for app in $(kubectl get applications -n argocd -o name 2>/dev/null); do
             kubectl patch $app -n argocd \
               -p '{"metadata":{"finalizers":[]}}' --type=merge 2>/dev/null || true
           done
-
-      - name: Delete portfolio ApplicationSet and ingresses
-        run: |
-          kubectl delete applicationset portfolio -n argocd --wait=false --ignore-not-found
+          kubectl delete application root -n argocd --wait=false --ignore-not-found
+          kubectl delete applicationset portfolio alb-ingress-controller -n argocd \
+            --wait=false --ignore-not-found
           kubectl delete ingress --all --all-namespaces --wait=false --ignore-not-found
-          kubectl delete applications frontend backend -n argocd --wait=false --ignore-not-found
 
       - name: Wait for ALBs — force delete if needed
         run: |
@@ -207,13 +230,6 @@ jobs:
             fi
             sleep 15
           done
-
-      - name: Delete ALB controller ApplicationSet
-        run: |
-          kubectl patch application alb-controller -n argocd \
-            -p '{"metadata":{"finalizers":[]}}' --type=merge 2>/dev/null || true
-          kubectl delete applicationset alb-ingress-controller -n argocd \
-            --wait=false --ignore-not-found
 
       - name: Uninstall ArgoCD
         run: helm uninstall argocd -n argocd || true

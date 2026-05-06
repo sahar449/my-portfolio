@@ -1,0 +1,38 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: portfolio
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  generators:
+    - list:
+        elements:
+          - name: frontend
+            path: ArgoCD/frontend/helm_chart
+            wave: "2"
+          - name: backend
+            path: ArgoCD/backend/helm_chart
+            wave: "3"
+  template:
+    metadata:
+      name: '{{name}}'
+      namespace: argocd
+      annotations:
+        argocd.argoproj.io/sync-wave: '{{wave}}'
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/sahar449/my-portfolio.git
+        targetRevision: HEAD
+        path: '{{path}}'
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: default
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=false
