@@ -15,8 +15,8 @@ spec:
             namespace: kube-system
             targetRevision: 1.8.3
             serviceAccountName: aws-load-balancer-controller
-            irsaRoleArn: ""
-            vpcId: ""
+            irsaRoleArn: "arn:aws:iam::634647866665:role/eks-lb-controller-role"
+            vpcId: "vpc-0f13309f213ea6c56"
   template:
     metadata:
       name: '{{name}}'
