@@ -3,8 +3,8 @@ app:
   namespace: default
   replicas: 2
   image:
-    repository: "placeholder/backend"
-    tag: null
+    repository: "634647866665.dkr.ecr.us-west-2.amazonaws.com/backend"
+    tag: 60a2e3781793678efb57e22fc12cda0db20e77af
     pullPolicy: Always
   securityContext:
     runAsUser: 1000
@@ -33,7 +33,7 @@ secrets:
   providerClassName: rds-secret-provider
   mountPath: /mnt/rds-secret
   k8sSecretName: rds-credentials
-  accountNumber: ""
+  accountNumber: "634647866665"
 resources:
   requests:
     memory: 64Mi
