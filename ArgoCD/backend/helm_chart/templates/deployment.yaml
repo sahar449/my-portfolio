@@ -5,101 +5,93 @@ metadata:
   namespace: {{ .Values.app.namespace }}
   labels:
     {{- include "backend.labels" . | nindent 4 }}
-
 spec:
   replicas: {{ .Values.app.replicas }}
-
   selector:
     matchLabels:
       {{- include "backend.selectorLabels" . | nindent 6 }}
-
   template:
     metadata:
       labels:
         {{- include "backend.labels" . | nindent 8 }}
-
+      annotations:
+        instrumentation.opentelemetry.io/inject-java: "false"
+        instrumentation.opentelemetry.io/inject-nodejs: "false"
+        instrumentation.opentelemetry.io/inject-python: "false"
+        instrumentation.opentelemetry.io/inject-dotnet: "false"
     spec:
       nodeSelector:
         {{- toYaml .Values.app.nodeSelector | nindent 8 }}
-
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              {{- include "backend.selectorLabels" . | nindent 14 }}
       serviceAccountName: {{ .Values.secrets.serviceAccountName }}
-
       securityContext:
         {{- include "backend.podSecurityContext" . | nindent 8 }}
-
       containers:
       - name: {{ include "backend.name" . }}
         image: "{{ include "backend.image" . }}"
         imagePullPolicy: {{ .Values.app.image.pullPolicy }}
-
         securityContext:
           {{- include "backend.containerSecurityContext" . | nindent 10 }}
-
         ports:
         - containerPort: {{ .Values.service.targetPort }}
           name: http
-
         volumeMounts:
         - name: rds-secret-vol
           mountPath: {{ .Values.secrets.mountPath }}
           readOnly: true
-
         env:
         - name: DB_HOST
           valueFrom:
             secretKeyRef:
               name: {{ .Values.secrets.k8sSecretName }}
               key: host
-              optional: true  
-
+              optional: true
         - name: DB_USER
           valueFrom:
             secretKeyRef:
               name: {{ .Values.secrets.k8sSecretName }}
               key: username
               optional: true
-
         - name: DB_PASS
           valueFrom:
             secretKeyRef:
               name: {{ .Values.secrets.k8sSecretName }}
               key: password
               optional: true
-
         - name: DB_NAME
           valueFrom:
             secretKeyRef:
               name: {{ .Values.secrets.k8sSecretName }}
               key: dbname
               optional: true
-
         - name: DB_PORT
           value: "3306"
-
         resources:
           {{- toYaml .Values.resources | nindent 10 }}
-
-        # startupProbe:
-        #   httpGet:
-        #     path: /health/db
-        #     port: http
-        #   failureThreshold: 20
-        #   periodSeconds: 10
-
+        startupProbe:
+          httpGet:
+            path: /health/db
+            port: http
+          failureThreshold: 20
+          periodSeconds: 10
         livenessProbe:
           httpGet:
             path: /health
             port: http
           periodSeconds: 15
           failureThreshold: 3
-
-        # readinessProbe:
-        #   httpGet:
-        #     path: /health/db
-        #     port: http
-        #   periodSeconds: 10
-        #   failureThreshold: 3
-
+        readinessProbe:
+          httpGet:
+            path: /health/db
+            port: http
+          periodSeconds: 10
+          failureThreshold: 3
       volumes:
       - name: rds-secret-vol
         csi:
