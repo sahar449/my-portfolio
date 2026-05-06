@@ -18,6 +18,7 @@ spec:
         instrumentation.opentelemetry.io/inject-java: "false"
         instrumentation.opentelemetry.io/inject-nodejs: "false"
         instrumentation.opentelemetry.io/inject-python: "false"
+        instrumentation.opentelemetry.io/inject-dotnet: "false"
     spec:
       nodeSelector:
         {{- toYaml .Values.app.nodeSelector | nindent 8 }}
