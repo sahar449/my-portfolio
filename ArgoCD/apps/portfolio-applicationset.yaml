@@ -14,7 +14,7 @@ spec:
             wave: "2"
           - name: backend
             path: ArgoCD/backend/helm_chart
-            wave: "3"
+            wave: "2"
   template:
     metadata:
       name: '{{name}}'
