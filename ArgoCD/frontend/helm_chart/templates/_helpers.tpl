@@ -26,7 +26,7 @@ app: {{ include "frontend.name" . }}
 Full image reference: repository:tag
 */}}
 {{- define "frontend.image" -}}
-{{ .Values.app.image.repository }}:{{ .Values.app.image.tag }}
+{{- required "app.image.repository must be set by CD" .Values.app.image.repository }}:{{- required "app.image.tag must be set by CD" .Values.app.image.tag }}
 {{- end }}
 
 {{/*

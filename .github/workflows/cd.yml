@@ -113,7 +113,7 @@ jobs:
             --query 'cluster.resourcesVpcConfig.vpcId' \
             --output text)
           ACCOUNT=${{ secrets.AWS_ACCOUNT_NUMBER }}
-          IMAGE_TAG=${{ github.event.workflow_run.head_sha || github.sha }}
+          IMAGE_TAG="${{ github.event.workflow_run.head_sha }}"
           ECR_FRONTEND="${{ secrets.ECR_FRONTEND }}"
           ECR_BACKEND="${{ secrets.ECR_BACKEND }}"
           IRSA_ARN="arn:aws:iam::${ACCOUNT}:role/eks-lb-controller-role"
@@ -137,6 +137,17 @@ jobs:
             -i ArgoCD/backend/helm_chart/values.yaml
           yq e ".secrets.accountNumber = \"${ACCOUNT}\"" \
             -i ArgoCD/backend/helm_chart/values.yaml
+
+          if [ -z "${IMAGE_TAG}" ]; then
+            IMAGE_TAG=$(aws ecr describe-images \
+              --repository-name frontend \
+              --region ${{ env.AWS_REGION }} \
+              --query 'sort_by(imageDetails, &imagePushedAt)[-1].imageTags' \
+              --output json | jq -r '.[] | select(. != "latest")' | head -1)
+            echo "Manual trigger — latest ECR tag: ${IMAGE_TAG}"
+          else
+            echo "CI trigger — using tag: ${IMAGE_TAG}"
+          fi
 
           yq e ".app.image.tag = \"${IMAGE_TAG}\"" \
             -i ArgoCD/frontend/helm_chart/values.yaml

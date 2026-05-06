@@ -3,8 +3,8 @@ app:
   namespace: default
   replicas: 2
   image:
-    repository: "634647866665.dkr.ecr.us-west-2.amazonaws.com/frontend"
-    tag: e7c373e704d6c3a0e739b51e503b9226f78e0b66
+    repository: "placeholder/frontend"
+    tag: null
     pullPolicy: Always
   securityContext:
     runAsUser: 1000
