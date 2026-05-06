@@ -127,23 +127,24 @@ jobs:
           yq e ".spec.generators[0].list.elements[0].vpcId = \"${VPC_ID}\"" \
             -i ArgoCD/apps/alb-ingress-controller-applicationset.yaml
 
+          yq e ".app.image.repository = \"${ECR_FRONTEND}\"" \
+            -i ArgoCD/frontend/helm_chart/values.yaml
+          yq e ".app.image.repository = \"${ECR_BACKEND}\"" \
+            -i ArgoCD/backend/helm_chart/values.yaml
+          yq e ".secrets.accountNumber = \"${ACCOUNT}\"" \
+            -i ArgoCD/backend/helm_chart/values.yaml
+
           if aws ecr describe-images \
               --repository-name frontend \
               --image-ids imageTag="${IMAGE_TAG}" \
               --region ${{ env.AWS_REGION }} > /dev/null 2>&1; then
-            yq e ".app.image.repository = \"${ECR_FRONTEND}\"" \
-              -i ArgoCD/frontend/helm_chart/values.yaml
             yq e ".app.image.tag = \"${IMAGE_TAG}\"" \
               -i ArgoCD/frontend/helm_chart/values.yaml
-            yq e ".app.image.repository = \"${ECR_BACKEND}\"" \
-              -i ArgoCD/backend/helm_chart/values.yaml
             yq e ".app.image.tag = \"${IMAGE_TAG}\"" \
               -i ArgoCD/backend/helm_chart/values.yaml
-            yq e ".secrets.accountNumber = \"${ACCOUNT}\"" \
-              -i ArgoCD/backend/helm_chart/values.yaml
-            echo "Images found — updating values.yaml with tag ${IMAGE_TAG}"
+            echo "Images found — updating tag to ${IMAGE_TAG}"
           else
-            echo "No new images for ${IMAGE_TAG} — keeping existing values.yaml"
+            echo "No new images for ${IMAGE_TAG} — keeping existing tag"
           fi
 
           git config user.email "github-actions[bot]@users.noreply.github.com"
