@@ -79,12 +79,12 @@ spec:
         resources:
           {{- toYaml .Values.resources | nindent 10 }}
 
-        startupProbe:
-          httpGet:
-            path: /health/db
-            port: http
-          failureThreshold: 20
-          periodSeconds: 10
+        # startupProbe:
+        #   httpGet:
+        #     path: /health/db
+        #     port: http
+        #   failureThreshold: 20
+        #   periodSeconds: 10
 
         livenessProbe:
           httpGet:
@@ -93,12 +93,12 @@ spec:
           periodSeconds: 15
           failureThreshold: 3
 
-        readinessProbe:
-          httpGet:
-            path: /health/db
-            port: http
-          periodSeconds: 10
-          failureThreshold: 3
+        # readinessProbe:
+        #   httpGet:
+        #     path: /health/db
+        #     port: http
+        #   periodSeconds: 10
+        #   failureThreshold: 3
 
       volumes:
       - name: rds-secret-vol
