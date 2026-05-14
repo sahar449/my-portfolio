@@ -1,0 +1,25 @@
+# Terraform providers & plugins (885MB - לא לgit!)
+.terraform/
+
+# State files (מכילים sensitive data על התשתית)
+*.tfstate
+*.tfstate.backup
+*.tfstate.lock.info
+
+# Variables עם secrets
+*.tfvars
+!*.tfvars.example
+
+# Crash logs
+crash.log
+crash.*.log
+
+# Secrets
+.env
+.env.*
+*.pem
+*.key
+
+# OS
+.DS_Store
+Thumbs.db
