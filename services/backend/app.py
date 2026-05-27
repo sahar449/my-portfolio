@@ -14,7 +14,6 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1)
 xray_daemon = f"{os.environ.get('HOST_IP', '127.0.0.1')}:2000"
 xray_recorder.configure(service="backend", context_missing="LOG_ERROR", daemon_address=xray_daemon)
 XRayMiddleware(app, xray_recorder)
-patch_all()
 
 REDIS_HOST = os.environ.get("REDIS_HOST")
 REDIS_PASS = os.environ.get("REDIS_PASS")
@@ -133,6 +132,7 @@ def init_db():
 
 
 DB_AVAILABLE = init_with_db()
+patch_all()  # patch after startup so DB init calls aren't traced without a segment
 
 
 @app.route("/health")
