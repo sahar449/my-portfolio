@@ -4,7 +4,7 @@ app:
   replicas: 2
   image:
     repository: "634647866665.dkr.ecr.us-west-2.amazonaws.com/backend"
-    tag: d66abfe41337690dd48ac886b5082518e5b3b2a5
+    tag: 0c297c001fd3679babfe103f6ef65fa015b47fa4
     pullPolicy: Always
   securityContext:
     runAsUser: 1000
@@ -32,7 +32,6 @@ redis:
   providerClassName: redis-secrets
   k8sSecretName: redis-credentials
   mountPath: /mnt/redis-secret
-
 secrets:
   serviceAccountName: flask-app-sa
   providerClassName: rds-secrets
