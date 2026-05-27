@@ -1,11 +1,44 @@
 from flask import Flask, jsonify
 from werkzeug.middleware.proxy_fix import ProxyFix
+from aws_xray_sdk.core import xray_recorder, patch_all
+from aws_xray_sdk.ext.flask.middleware import XRayMiddleware
 import pymysql
+import redis
+import json
 import os
 import traceback
 
 app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1)
+
+xray_recorder.configure(service="backend")
+XRayMiddleware(app, xray_recorder)
+patch_all()
+
+REDIS_HOST = os.environ.get("REDIS_HOST")
+REDIS_PASS = os.environ.get("REDIS_PASS")
+REDIS_PORT = int(os.environ.get("REDIS_PORT", 6379))
+CACHE_TTL  = 300  # 5 minutes
+
+def get_redis():
+    if not REDIS_HOST:
+        return None
+    try:
+        client = redis.Redis(
+            host=REDIS_HOST,
+            password=REDIS_PASS,
+            port=REDIS_PORT,
+            ssl=True,
+            decode_responses=True,
+            socket_connect_timeout=2,
+        )
+        client.ping()
+        return client
+    except Exception as e:
+        print(f"Redis unavailable: {e}")
+        return None
+
+redis_client = get_redis()
 
 DB_HOST = os.environ.get("DB_HOST")
 DB_USER = os.environ.get("DB_USER")
@@ -122,22 +155,62 @@ def health_db():
 def get_profile_data():
     if not DB_AVAILABLE:
         return jsonify({"status": "error", "db": "not configured"}), 503
-    conn = get_db()
-    with conn.cursor() as cur:
-        cur.execute("SELECT * FROM profile WHERE id = 1")
-        row = cur.fetchone()
-    conn.close()
+
+    try:
+        if redis_client:
+            with xray_recorder.in_subsegment("redis-get-profile") as seg:
+                cached = redis_client.get("profile")
+                seg.put_annotation("cache_hit", cached is not None)
+            if cached:
+                return jsonify(json.loads(cached))
+    except Exception as e:
+        print(f"Redis get failed: {e}")
+
+    with xray_recorder.in_subsegment("rds-get-profile"):
+        conn = get_db()
+        with conn.cursor() as cur:
+            cur.execute("SELECT * FROM profile WHERE id = 1")
+            row = cur.fetchone()
+        conn.close()
+
+    try:
+        if redis_client:
+            with xray_recorder.in_subsegment("redis-set-profile"):
+                redis_client.setex("profile", CACHE_TTL, json.dumps(row))
+    except Exception as e:
+        print(f"Redis set failed: {e}")
+
     return jsonify(row)
 
 
 def get_certificates_data():
     if not DB_AVAILABLE:
         return jsonify({"status": "error", "db": "not configured"}), 503
-    conn = get_db()
-    with conn.cursor() as cur:
-        cur.execute("SELECT * FROM certificates ORDER BY id")
-        rows = cur.fetchall()
-    conn.close()
+
+    try:
+        if redis_client:
+            with xray_recorder.in_subsegment("redis-get-certificates") as seg:
+                cached = redis_client.get("certificates")
+                seg.put_annotation("cache_hit", cached is not None)
+            if cached:
+                return jsonify(json.loads(cached))
+    except Exception as e:
+        print(f"Redis get failed: {e}")
+
+    with xray_recorder.in_subsegment("rds-get-certificates"):
+        conn = get_db()
+        with conn.cursor() as cur:
+            cur.execute("SELECT * FROM certificates ORDER BY id")
+            rows = cur.fetchall()
+        conn.close()
+
+    try:
+        if redis_client:
+            with xray_recorder.in_subsegment("redis-set-certificates"):
+                redis_client.setex("certificates", CACHE_TTL, json.dumps(rows))
+    except Exception as e:
+        print(f"Redis set failed: {e}")
+
     return jsonify(rows)
 
 
