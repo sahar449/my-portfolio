@@ -1,6 +1,6 @@
 from flask import Flask, jsonify
 from werkzeug.middleware.proxy_fix import ProxyFix
-from aws_xray_sdk.core import xray_recorder, patch_all
+from aws_xray_sdk.core import xray_recorder
 from aws_xray_sdk.ext.flask.middleware import XRayMiddleware
 import pymysql
 import redis
@@ -12,7 +12,7 @@ app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1)
 
 xray_daemon = f"{os.environ.get('HOST_IP', '127.0.0.1')}:2000"
-xray_recorder.configure(service="backend", context_missing="LOG_ERROR", daemon_address=xray_daemon)
+xray_recorder.configure(service="backend", context_missing="LOG_ERROR", daemon_address=xray_daemon, sampling=False)
 XRayMiddleware(app, xray_recorder)
 
 REDIS_HOST = os.environ.get("REDIS_HOST")
@@ -132,7 +132,6 @@ def init_db():
 
 
 DB_AVAILABLE = init_with_db()
-patch_all()  # patch after startup so DB init calls aren't traced without a segment
 
 
 @app.route("/health")
