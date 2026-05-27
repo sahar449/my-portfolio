@@ -11,7 +11,8 @@ import traceback
 app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1)
 
-xray_recorder.configure(service="backend")
+xray_daemon = f"{os.environ.get('HOST_IP', '127.0.0.1')}:2000"
+xray_recorder.configure(service="backend", context_missing="LOG_ERROR", daemon_address=xray_daemon)
 XRayMiddleware(app, xray_recorder)
 patch_all()
 

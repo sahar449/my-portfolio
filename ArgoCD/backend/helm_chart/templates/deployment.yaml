@@ -93,6 +93,10 @@ spec:
               name: {{ .Values.redis.k8sSecretName }}
               key: port
               optional: true
+        - name: HOST_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.hostIP
         resources:
           {{- toYaml .Values.resources | nindent 10 }}
         startupProbe:
