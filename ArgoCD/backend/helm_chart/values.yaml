@@ -4,7 +4,7 @@ app:
   replicas: 2
   image:
     repository: "634647866665.dkr.ecr.us-west-2.amazonaws.com/backend"
-    tag: c51240c63c0fc3787a4b869420ae0372de1353ca
+    tag: 7172a8e04899bd684e3d75a5dfecd976a597d19f
     pullPolicy: Always
   securityContext:
     runAsUser: 1000
@@ -37,6 +37,7 @@ secrets:
   providerClassName: rds-secrets
   mountPath: /mnt/rds-secret
   k8sSecretName: rds-credentials
+  accountNumber: "634647866665"
 resources:
   requests:
     memory: 64Mi
