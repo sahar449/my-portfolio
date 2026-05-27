@@ -26,3 +26,8 @@ output "flask_app_role_arn" {
   description = "The ARN of the IRSA role for the Flask backend service account"
   value       = aws_iam_role.flask_app_role.arn
 }
+
+output "flask_app_role_name" {
+  description = "The name of the IRSA role for the Flask backend service account"
+  value       = aws_iam_role.flask_app_role.name
+}

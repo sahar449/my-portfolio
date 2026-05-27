@@ -58,6 +58,14 @@ module "rds" {
 }
 
 
+module "elasticache" {
+  source             = "./modules/elasticache"
+  name_prefix        = var.name_prefix
+  vpc_id             = module.vpc.vpc_id
+  private_subnet_ids = module.vpc.private_subnet_ids
+  cidr_blocks        = module.vpc.cidr_blocks
+}
+
 module "monitoring" {
   source            = "./modules/monitoring"
   name_prefix       = var.name_prefix

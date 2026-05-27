@@ -419,3 +419,34 @@ resource "aws_iam_role_policy_attachment" "flask_app_attach" {
   policy_arn = aws_iam_policy.flask_app_secrets_policy.arn
 }
 
+###################################
+# X-Ray Tracing — Flask App
+###################################
+
+resource "aws_iam_policy" "flask_app_xray_policy" {
+  name        = "flask-app-xray-policy"
+  description = "Allow Flask app to send traces to AWS X-Ray"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "xray:PutTraceSegments",
+          "xray:PutTelemetryRecords",
+          "xray:GetSamplingRules",
+          "xray:GetSamplingTargets",
+          "xray:GetSamplingStatisticSummaries"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "flask_app_xray_attach" {
+  role       = aws_iam_role.flask_app_role.name
+  policy_arn = aws_iam_policy.flask_app_xray_policy.arn
+}
+
