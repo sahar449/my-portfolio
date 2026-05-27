@@ -23,3 +23,9 @@ variable "node_type" {
   type        = string
   default     = "cache.t3.micro"
 }
+
+variable "redis_secret_name" {
+  description = "Secrets Manager secret name for Redis credentials"
+  type        = string
+  default     = "redis-creds"
+}

@@ -45,6 +45,9 @@ spec:
         - name: rds-secret-vol
           mountPath: {{ .Values.secrets.mountPath }}
           readOnly: true
+        - name: redis-secret-vol
+          mountPath: {{ .Values.redis.mountPath }}
+          readOnly: true
         env:
         - name: DB_HOST
           valueFrom:
@@ -72,6 +75,24 @@ spec:
               optional: true
         - name: DB_PORT
           value: "3306"
+        - name: REDIS_HOST
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.redis.k8sSecretName }}
+              key: host
+              optional: true
+        - name: REDIS_PASS
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.redis.k8sSecretName }}
+              key: password
+              optional: true
+        - name: REDIS_PORT
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.redis.k8sSecretName }}
+              key: port
+              optional: true
         resources:
           {{- toYaml .Values.resources | nindent 10 }}
         startupProbe:
@@ -99,3 +120,9 @@ spec:
           readOnly: true
           volumeAttributes:
             secretProviderClass: {{ .Values.secrets.providerClassName }}
+      - name: redis-secret-vol
+        csi:
+          driver: secrets-store.csi.k8s.io
+          readOnly: true
+          volumeAttributes:
+            secretProviderClass: {{ .Values.redis.providerClassName }}

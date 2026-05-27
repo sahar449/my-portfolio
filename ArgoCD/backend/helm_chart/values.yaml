@@ -28,9 +28,14 @@ service:
   type: ClusterIP
   port: 5002
   targetPort: 5002
+redis:
+  providerClassName: redis-secrets
+  k8sSecretName: redis-credentials
+  mountPath: /mnt/redis-secret
+
 secrets:
   serviceAccountName: flask-app-sa
-  providerClassName: rds-secret-provider
+  providerClassName: rds-secrets
   mountPath: /mnt/rds-secret
   k8sSecretName: rds-credentials
   accountNumber: "634647866665"

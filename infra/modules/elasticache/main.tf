@@ -41,6 +41,28 @@ resource "aws_security_group_rule" "redis_egress" {
 }
 
 ###################################
+# Auth Token + Secrets Manager
+###################################
+
+resource "random_password" "redis_auth" {
+  length  = 32
+  special = false
+}
+
+resource "aws_secretsmanager_secret" "redis" {
+  name = var.redis_secret_name
+}
+
+resource "aws_secretsmanager_secret_version" "redis" {
+  secret_id = aws_secretsmanager_secret.redis.id
+  secret_string = jsonencode({
+    host     = aws_elasticache_replication_group.this.primary_endpoint_address
+    password = random_password.redis_auth.result
+    port     = "6379"
+  })
+}
+
+###################################
 # CloudWatch — Slow Logs
 ###################################
 
@@ -57,16 +79,20 @@ resource "aws_cloudwatch_log_group" "redis_slow_logs" {
 # ElastiCache Cluster
 ###################################
 
-resource "aws_elasticache_cluster" "this" {
-  cluster_id           = "${var.name_prefix}-redis"
+resource "aws_elasticache_replication_group" "this" {
+  replication_group_id = "${var.name_prefix}-redis"
+  description          = "Redis cluster for ${var.name_prefix}"
   engine               = "redis"
   engine_version       = "7.1"
   node_type            = var.node_type
-  num_cache_nodes      = 1
+  num_cache_clusters   = 1
   parameter_group_name = "default.redis7"
   port                 = 6379
   subnet_group_name    = aws_elasticache_subnet_group.this.name
   security_group_ids   = [aws_security_group.redis.id]
+
+  auth_token                 = random_password.redis_auth.result
+  transit_encryption_enabled = true
 
   log_delivery_configuration {
     destination      = aws_cloudwatch_log_group.redis_slow_logs.name
@@ -84,7 +110,6 @@ resource "aws_elasticache_cluster" "this" {
 # CloudWatch Alarms
 ###################################
 
-# Alert when Redis is evicting keys — means memory is full
 resource "aws_cloudwatch_metric_alarm" "evictions" {
   alarm_name          = "${var.name_prefix}-redis-evictions"
   comparison_operator = "GreaterThanThreshold"
@@ -97,15 +122,10 @@ resource "aws_cloudwatch_metric_alarm" "evictions" {
   alarm_description   = "Redis is evicting keys — memory may be insufficient"
 
   dimensions = {
-    CacheClusterId = aws_elasticache_cluster.this.cluster_id
-  }
-
-  tags = {
-    Name = "${var.name_prefix}-redis-evictions-alarm"
+    CacheClusterId = "${aws_elasticache_replication_group.this.replication_group_id}-0001"
   }
 }
 
-# Alert when CPU is too high
 resource "aws_cloudwatch_metric_alarm" "cpu" {
   alarm_name          = "${var.name_prefix}-redis-high-cpu"
   comparison_operator = "GreaterThanThreshold"
@@ -118,15 +138,10 @@ resource "aws_cloudwatch_metric_alarm" "cpu" {
   alarm_description   = "Redis CPU utilization is above 80%"
 
   dimensions = {
-    CacheClusterId = aws_elasticache_cluster.this.cluster_id
-  }
-
-  tags = {
-    Name = "${var.name_prefix}-redis-cpu-alarm"
+    CacheClusterId = "${aws_elasticache_replication_group.this.replication_group_id}-0001"
   }
 }
 
-# Alert when cache miss rate is high (CacheMisses > CacheHits)
 resource "aws_cloudwatch_metric_alarm" "cache_misses" {
   alarm_name          = "${var.name_prefix}-redis-high-misses"
   comparison_operator = "GreaterThanThreshold"
@@ -136,13 +151,9 @@ resource "aws_cloudwatch_metric_alarm" "cache_misses" {
   period              = 300
   statistic           = "Sum"
   threshold           = 1000
-  alarm_description   = "Redis cache miss rate is high — TTL may be too short or cache is cold"
+  alarm_description   = "Redis cache miss rate is high"
 
   dimensions = {
-    CacheClusterId = aws_elasticache_cluster.this.cluster_id
-  }
-
-  tags = {
-    Name = "${var.name_prefix}-redis-misses-alarm"
+    CacheClusterId = "${aws_elasticache_replication_group.this.replication_group_id}-0001"
   }
 }
