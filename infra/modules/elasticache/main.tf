@@ -50,7 +50,8 @@ resource "random_password" "redis_auth" {
 }
 
 resource "aws_secretsmanager_secret" "redis" {
-  name = var.redis_secret_name
+  name                    = var.redis_secret_name
+  recovery_window_in_days = 0
 }
 
 resource "aws_secretsmanager_secret_version" "redis" {
