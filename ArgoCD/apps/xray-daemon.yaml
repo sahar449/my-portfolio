@@ -1,0 +1,28 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: xray-daemon
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://aws.github.io/eks-charts
+    chart: aws-xray-daemon
+    targetRevision: "1.0.1"
+    helm:
+      values: |
+        daemonSet:
+          hostNetwork: true
+        image:
+          tag: "3.3.13"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: amazon-cloudwatch
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
