@@ -15,7 +15,7 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1)
 
 otlp_endpoint = os.environ.get(
     "OTEL_EXPORTER_OTLP_ENDPOINT",
-    "http://cloudwatch-agent.amazon-cloudwatch.svc.cluster.local:4317"
+    "http://cloudwatch-agent.amazon-cloudwatch.svc.cluster.local:4315"
 )
 exporter = OTLPSpanExporter(endpoint=otlp_endpoint, insecure=True)
 provider = TracerProvider()
