@@ -13,7 +13,10 @@ import traceback
 app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1)
 
-otlp_endpoint = f"http://{os.environ.get('HOST_IP', 'localhost')}:4317"
+otlp_endpoint = os.environ.get(
+    "OTEL_EXPORTER_OTLP_ENDPOINT",
+    "http://cloudwatch-agent.amazon-cloudwatch.svc.cluster.local:4317"
+)
 exporter = OTLPSpanExporter(endpoint=otlp_endpoint, insecure=True)
 provider = TracerProvider()
 provider.add_span_processor(BatchSpanProcessor(exporter))
