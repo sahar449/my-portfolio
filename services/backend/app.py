@@ -1,7 +1,10 @@
 from flask import Flask, jsonify
 from werkzeug.middleware.proxy_fix import ProxyFix
-from aws_xray_sdk.core import xray_recorder
-from aws_xray_sdk.ext.flask.middleware import XRayMiddleware
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+from opentelemetry.instrumentation.flask import FlaskInstrumentor
 import pymysql
 import redis
 import json
@@ -11,14 +14,18 @@ import traceback
 app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1)
 
-xray_daemon = f"{os.environ.get('HOST_IP', '127.0.0.1')}:2000"
-xray_recorder.configure(service="backend", context_missing="LOG_ERROR", daemon_address=xray_daemon, sampling=False)
-XRayMiddleware(app, xray_recorder)
+otlp_endpoint = f"http://{os.environ.get('HOST_IP', 'localhost')}:4317"
+exporter = OTLPSpanExporter(endpoint=otlp_endpoint, insecure=True)
+provider = TracerProvider()
+provider.add_span_processor(BatchSpanProcessor(exporter))
+trace.set_tracer_provider(provider)
+FlaskInstrumentor().instrument_app(app)
+tracer = trace.get_tracer("backend")
 
 REDIS_HOST = os.environ.get("REDIS_HOST")
 REDIS_PASS = os.environ.get("REDIS_PASS")
 REDIS_PORT = int(os.environ.get("REDIS_PORT", 6379))
-CACHE_TTL  = 300  # 5 minutes
+CACHE_TTL  = 300
 
 def get_redis():
     if not REDIS_HOST:
@@ -158,15 +165,15 @@ def get_profile_data():
 
     try:
         if redis_client:
-            with xray_recorder.in_subsegment("redis-get-profile") as seg:
+            with tracer.start_as_current_span("redis-get-profile") as span:
                 cached = redis_client.get("profile")
-                seg.put_annotation("cache_hit", cached is not None)
+                span.set_attribute("cache.hit", cached is not None)
             if cached:
                 return jsonify(json.loads(cached))
     except Exception as e:
         print(f"Redis get failed: {e}")
 
-    with xray_recorder.in_subsegment("rds-get-profile"):
+    with tracer.start_as_current_span("rds-get-profile"):
         conn = get_db()
         with conn.cursor() as cur:
             cur.execute("SELECT * FROM profile WHERE id = 1")
@@ -175,7 +182,7 @@ def get_profile_data():
 
     try:
         if redis_client:
-            with xray_recorder.in_subsegment("redis-set-profile"):
+            with tracer.start_as_current_span("redis-set-profile"):
                 redis_client.setex("profile", CACHE_TTL, json.dumps(row))
     except Exception as e:
         print(f"Redis set failed: {e}")
@@ -189,15 +196,15 @@ def get_certificates_data():
 
     try:
         if redis_client:
-            with xray_recorder.in_subsegment("redis-get-certificates") as seg:
+            with tracer.start_as_current_span("redis-get-certificates") as span:
                 cached = redis_client.get("certificates")
-                seg.put_annotation("cache_hit", cached is not None)
+                span.set_attribute("cache.hit", cached is not None)
             if cached:
                 return jsonify(json.loads(cached))
     except Exception as e:
         print(f"Redis get failed: {e}")
 
-    with xray_recorder.in_subsegment("rds-get-certificates"):
+    with tracer.start_as_current_span("rds-get-certificates"):
         conn = get_db()
         with conn.cursor() as cur:
             cur.execute("SELECT * FROM certificates ORDER BY id")
@@ -206,7 +213,7 @@ def get_certificates_data():
 
     try:
         if redis_client:
-            with xray_recorder.in_subsegment("redis-set-certificates"):
+            with tracer.start_as_current_span("redis-set-certificates"):
                 redis_client.setex("certificates", CACHE_TTL, json.dumps(rows))
     except Exception as e:
         print(f"Redis set failed: {e}")
