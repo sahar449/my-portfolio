@@ -1,9 +1,6 @@
 from flask import Flask, jsonify
 from werkzeug.middleware.proxy_fix import ProxyFix
 from opentelemetry import trace
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 import pymysql
 import redis
 import json
@@ -13,14 +10,6 @@ import traceback
 app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1)
 
-otlp_endpoint = os.environ.get(
-    "OTEL_EXPORTER_OTLP_ENDPOINT",
-    "http://cloudwatch-agent.amazon-cloudwatch.svc.cluster.local:4315"
-)
-exporter = OTLPSpanExporter(endpoint=otlp_endpoint, insecure=True)
-provider = TracerProvider()
-provider.add_span_processor(BatchSpanProcessor(exporter))
-trace.set_tracer_provider(provider)
 tracer = trace.get_tracer("backend")
 
 REDIS_HOST = os.environ.get("REDIS_HOST")
