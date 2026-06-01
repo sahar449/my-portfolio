@@ -4,7 +4,6 @@ from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-from opentelemetry.instrumentation.flask import FlaskInstrumentor
 import pymysql
 import redis
 import json
@@ -19,7 +18,6 @@ exporter = OTLPSpanExporter(endpoint=otlp_endpoint, insecure=True)
 provider = TracerProvider()
 provider.add_span_processor(BatchSpanProcessor(exporter))
 trace.set_tracer_provider(provider)
-FlaskInstrumentor().instrument_app(app)
 tracer = trace.get_tracer("backend")
 
 REDIS_HOST = os.environ.get("REDIS_HOST")
