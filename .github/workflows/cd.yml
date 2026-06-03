@@ -270,31 +270,46 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
           role-session-name: github-actions-terraform-destroy
 
-      - name: Cleanup all VPC resources
+      - name: Pre-clean externally-created resources
         run: |
           VPC_ID=$(aws ec2 describe-vpcs \
             --filters "Name=tag:Name,Values=${{ env.VPC_NAME }}" \
             --query "Vpcs[0].VpcId" --output text)
           echo "VPC: $VPC_ID"
-          [ -z "$VPC_ID" ] || [ "$VPC_ID" = "None" ] && echo "VPC not found, skipping" && exit 0
+          if [ -z "$VPC_ID" ] || [ "$VPC_ID" = "None" ]; then
+            echo "VPC not found, skipping pre-clean"
+            exit 0
+          fi
 
-          echo "=== Load balancers ==="
+          echo "=== Delete remaining ALBs and wait until gone ==="
           LB_ARNS=$(aws elbv2 describe-load-balancers \
             --query "LoadBalancers[?VpcId=='$VPC_ID'].LoadBalancerArn" --output text)
           for arn in $LB_ARNS; do
             echo "Deleting LB: $arn"
             aws elbv2 delete-load-balancer --load-balancer-arn "$arn" || true
           done
-          [ -n "$LB_ARNS" ] && sleep 20
+          if [ -n "$LB_ARNS" ]; then
+            echo "Polling until all ALBs are gone..."
+            for i in $(seq 1 20); do
+              REMAINING=$(aws elbv2 describe-load-balancers \
+                --query "LoadBalancers[?VpcId=='$VPC_ID'].LoadBalancerArn" --output text)
+              [ -z "$REMAINING" ] && echo "All ALBs deleted" && break
+              echo "Still waiting for ALBs... ($i/20)"
+              sleep 15
+            done
+            echo "Waiting 30s for listener deregistration to complete..."
+            sleep 30
+          fi
 
-          echo "=== Target groups ==="
+          echo "=== Delete target groups ==="
           TG_ARNS=$(aws elbv2 describe-target-groups \
             --query "TargetGroups[?VpcId=='$VPC_ID'].TargetGroupArn" --output text)
           for arn in $TG_ARNS; do
+            echo "Deleting TG: $arn"
             aws elbv2 delete-target-group --target-group-arn "$arn" || true
           done
 
-          echo "=== VPC Endpoints ==="
+          echo "=== Delete VPC Endpoints ==="
           ENDPOINTS=$(aws ec2 describe-vpc-endpoints \
             --filters "Name=vpc-id,Values=$VPC_ID" \
             --query "VpcEndpoints[?State!='deleted'].VpcEndpointId" --output text)
@@ -303,7 +318,7 @@ jobs:
             aws ec2 delete-vpc-endpoints --vpc-endpoint-ids "$ep" || true
           done
 
-          echo "=== NAT Gateways ==="
+          echo "=== Delete NAT Gateways and poll until fully deleted ==="
           NATS=$(aws ec2 describe-nat-gateways \
             --filter "Name=vpc-id,Values=$VPC_ID" \
             --query "NatGateways[?State!='deleted'].NatGatewayId" --output text)
@@ -311,9 +326,45 @@ jobs:
             echo "Deleting NAT: $nat"
             aws ec2 delete-nat-gateway --nat-gateway-id "$nat" || true
           done
-          [ -n "$NATS" ] && sleep 20
+          if [ -n "$NATS" ]; then
+            echo "Polling until all NAT gateways are fully deleted (takes 60-120s)..."
+            for i in $(seq 1 20); do
+              REMAINING=$(aws ec2 describe-nat-gateways \
+                --filter "Name=vpc-id,Values=$VPC_ID" \
+                --query "NatGateways[?State!='deleted'].NatGatewayId" --output text)
+              [ -z "$REMAINING" ] && echo "All NAT gateways deleted" && break
+              echo "Still waiting for NAT gateways... ($i/20)"
+              sleep 15
+            done
+          fi
 
-          echo "=== Revoke all SG rules (break circular deps) ==="
+          echo "=== Release EIPs freed by NAT gateway deletion ==="
+          EIPS=$(aws ec2 describe-addresses \
+            --filters "Name=domain,Values=vpc" \
+            --query "Addresses[?AssociationId==null].AllocationId" --output text)
+          for eip in $EIPS; do
+            echo "Releasing EIP: $eip"
+            aws ec2 release-address --allocation-id "$eip" || true
+          done
+
+      - name: Terraform Destroy
+        run: |
+          cd infra
+          terraform init -upgrade
+          terraform destroy -auto-approve
+
+      - name: Post-cleanup orphaned VPC resources (if any remain after Terraform)
+        run: |
+          VPC_ID=$(aws ec2 describe-vpcs \
+            --filters "Name=tag:Name,Values=${{ env.VPC_NAME }}" \
+            --query "Vpcs[0].VpcId" --output text)
+          if [ -z "$VPC_ID" ] || [ "$VPC_ID" = "None" ]; then
+            echo "VPC already deleted by Terraform — nothing to clean up"
+            exit 0
+          fi
+          echo "VPC $VPC_ID still exists — cleaning up orphaned resources..."
+
+          echo "=== Revoke and delete security groups ==="
           SGS=$(aws ec2 describe-security-groups \
             --filters "Name=vpc-id,Values=$VPC_ID" \
             --query "SecurityGroups[?GroupName!='default'].GroupId" --output text)
@@ -329,23 +380,21 @@ jobs:
               aws ec2 revoke-security-group-egress --group-id "$sg" \
                 --ip-permissions "$EGRESS" 2>/dev/null || true
           done
-
-          echo "=== Delete security groups ==="
           for sg in $SGS; do
             echo "Deleting SG: $sg"
             aws ec2 delete-security-group --group-id "$sg" || true
           done
 
-          echo "=== Network interfaces ==="
+          echo "=== Delete available ENIs ==="
           ENIS=$(aws ec2 describe-network-interfaces \
-            --filters "Name=vpc-id,Values=$VPC_ID" \
-            --query "NetworkInterfaces[?Status=='available'].NetworkInterfaceId" --output text)
+            --filters "Name=vpc-id,Values=$VPC_ID" "Name=status,Values=available" \
+            --query "NetworkInterfaces[*].NetworkInterfaceId" --output text)
           for eni in $ENIS; do
             echo "Deleting ENI: $eni"
             aws ec2 delete-network-interface --network-interface-id "$eni" || true
           done
 
-          echo "=== Internet Gateways ==="
+          echo "=== Detach and delete Internet Gateways ==="
           IGWS=$(aws ec2 describe-internet-gateways \
             --filters "Name=attachment.vpc-id,Values=$VPC_ID" \
             --query "InternetGateways[*].InternetGatewayId" --output text)
@@ -355,7 +404,7 @@ jobs:
             aws ec2 delete-internet-gateway --internet-gateway-id "$igw" || true
           done
 
-          echo "=== Subnets ==="
+          echo "=== Delete subnets ==="
           SUBNETS=$(aws ec2 describe-subnets \
             --filters "Name=vpc-id,Values=$VPC_ID" \
             --query "Subnets[*].SubnetId" --output text)
@@ -364,7 +413,7 @@ jobs:
             aws ec2 delete-subnet --subnet-id "$subnet" || true
           done
 
-          echo "=== Route tables (non-main) ==="
+          echo "=== Delete non-main route tables ==="
           RTS=$(aws ec2 describe-route-tables \
             --filters "Name=vpc-id,Values=$VPC_ID" \
             --query "RouteTables[?Associations[?Main!=\`true\`] || !Associations].RouteTableId" \
@@ -374,8 +423,5 @@ jobs:
             aws ec2 delete-route-table --route-table-id "$rt" || true
           done
 
-      - name: Terraform Destroy
-        run: |
-          cd infra
-          terraform init -upgrade
-          terraform destroy -auto-approve
+          echo "=== Delete VPC ==="
+          aws ec2 delete-vpc --vpc-id "$VPC_ID" || true
