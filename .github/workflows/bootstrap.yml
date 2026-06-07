@@ -78,6 +78,10 @@ jobs:
             --filters "Name=tag:Name,Values=${{ env.vpc_name }}" \
             --query "Vpcs[0].VpcId" --output text)
           echo "VPC: $VPC_ID"
+          if [ -z "$VPC_ID" ] || [ "$VPC_ID" = "None" ]; then
+            echo "VPC not found — skipping cleanup"
+            exit 0
+          fi
 
           echo "=== Load balancers ==="
           LB_ARNS=$(aws elbv2 describe-load-balancers \
@@ -96,10 +100,22 @@ jobs:
             aws elbv2 delete-target-group --target-group-arn "$arn" || true
           done
 
-          echo "=== Non-default security groups ==="
+          echo "=== Non-default security groups — revoke rules then delete ==="
           SGS=$(aws ec2 describe-security-groups \
             --filters "Name=vpc-id,Values=$VPC_ID" \
             --query "SecurityGroups[?GroupName!='default'].GroupId" --output text)
+          for sg in $SGS; do
+            INGRESS=$(aws ec2 describe-security-groups --group-ids "$sg" \
+              --query "SecurityGroups[0].IpPermissions" --output json)
+            EGRESS=$(aws ec2 describe-security-groups --group-ids "$sg" \
+              --query "SecurityGroups[0].IpPermissionsEgress" --output json)
+            [ "$INGRESS" != "[]" ] && \
+              aws ec2 revoke-security-group-ingress --group-id "$sg" \
+                --ip-permissions "$INGRESS" 2>/dev/null || true
+            [ "$EGRESS" != "[]" ] && \
+              aws ec2 revoke-security-group-egress --group-id "$sg" \
+                --ip-permissions "$EGRESS" 2>/dev/null || true
+          done
           for sg in $SGS; do
             echo "Deleting SG: $sg"
             aws ec2 delete-security-group --group-id "$sg" || true

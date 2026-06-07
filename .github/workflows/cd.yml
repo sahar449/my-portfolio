@@ -207,9 +207,11 @@ jobs:
           role-session-name: github-actions-destroy
 
       - name: Update kubeconfig
+        continue-on-error: true
         run: aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name ${{ env.CLUSTER_NAME }}
 
       - name: Remove ArgoCD finalizers and delete root Application
+        continue-on-error: true
         run: |
           for app in $(kubectl get applications -n argocd -o name 2>/dev/null); do
             kubectl patch $app -n argocd \
@@ -221,6 +223,7 @@ jobs:
           kubectl delete ingress --all --all-namespaces --wait=false --ignore-not-found
 
       - name: Wait for ALBs — force delete if needed
+        continue-on-error: true
         run: |
           VPC_ID=$(aws ec2 describe-vpcs \
             --filters "Name=tag:Name,Values=${{ env.VPC_NAME }}" \
@@ -253,7 +256,10 @@ jobs:
   destroy-bootstrap:
     needs: destroy
     runs-on: ubuntu-latest
-    if: needs.destroy.result == 'success'
+    if: |
+      always() &&
+      github.event_name == 'workflow_dispatch' &&
+      github.event.inputs.action == 'destroy'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
