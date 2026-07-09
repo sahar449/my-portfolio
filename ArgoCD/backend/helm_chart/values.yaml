@@ -4,7 +4,7 @@ app:
   replicas: 2
   image:
     repository: "634647866665.dkr.ecr.us-west-2.amazonaws.com/backend"
-    tag: e5fb8b950d082c05a4f8845828ccb099e87a8c1f
+    tag: 9326e281a037e924f60d43a797010e6c9efc4876
     pullPolicy: Always
   securityContext:
     runAsUser: 1000
