@@ -38,6 +38,9 @@ secrets:
   mountPath: /mnt/rds-secret
   k8sSecretName: rds-credentials
   accountNumber: "634647866665"
+hooks:
+  # Enable pre-install/pre-upgrade + post-install/post-upgrade Job hooks
+  enabled: false
 resources:
   requests:
     memory: 64Mi

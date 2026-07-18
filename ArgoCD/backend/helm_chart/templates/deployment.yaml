@@ -48,51 +48,20 @@ spec:
         - name: redis-secret-vol
           mountPath: {{ .Values.redis.mountPath }}
           readOnly: true
+        # Import all secret keys as env vars. Keys are already named
+        # DB_HOST/DB_USER/DB_PASS/DB_NAME and REDIS_HOST/REDIS_PASS/REDIS_PORT
+        # (renamed in the SecretProviderClass secretObjects), so no per-var mapping needed.
+        envFrom:
+        - secretRef:
+            name: {{ .Values.secrets.k8sSecretName }}
+            optional: true
+        - secretRef:
+            name: {{ .Values.redis.k8sSecretName }}
+            optional: true
+        # Non-secret / literal values
         env:
-        - name: DB_HOST
-          valueFrom:
-            secretKeyRef:
-              name: {{ .Values.secrets.k8sSecretName }}
-              key: host
-              optional: true
-        - name: DB_USER
-          valueFrom:
-            secretKeyRef:
-              name: {{ .Values.secrets.k8sSecretName }}
-              key: username
-              optional: true
-        - name: DB_PASS
-          valueFrom:
-            secretKeyRef:
-              name: {{ .Values.secrets.k8sSecretName }}
-              key: password
-              optional: true
-        - name: DB_NAME
-          valueFrom:
-            secretKeyRef:
-              name: {{ .Values.secrets.k8sSecretName }}
-              key: dbname
-              optional: true
         - name: DB_PORT
           value: "3306"
-        - name: REDIS_HOST
-          valueFrom:
-            secretKeyRef:
-              name: {{ .Values.redis.k8sSecretName }}
-              key: host
-              optional: true
-        - name: REDIS_PASS
-          valueFrom:
-            secretKeyRef:
-              name: {{ .Values.redis.k8sSecretName }}
-              key: password
-              optional: true
-        - name: REDIS_PORT
-          valueFrom:
-            secretKeyRef:
-              name: {{ .Values.redis.k8sSecretName }}
-              key: port
-              optional: true
         - name: HOST_IP
           valueFrom:
             fieldRef:

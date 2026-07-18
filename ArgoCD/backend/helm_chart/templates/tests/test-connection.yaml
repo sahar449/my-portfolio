@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "backend.name" . }}-test-connection"
+  namespace: {{ .Values.app.namespace }}
+  labels:
+    {{- include "backend.labels" . | nindent 4 }}
+  annotations:
+    # Marks this Pod as a Helm test -> only runs on `helm test <release>`
+    "helm.sh/hook": test
+    # Clean up the test pod automatically
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  containers:
+    - name: curl
+      image: curlimages/curl:8.10.1
+      command: ["curl"]
+      args:
+        - "--fail"
+        - "--silent"
+        - "--show-error"
+        - "http://{{ include "backend.name" . }}:{{ .Values.service.port }}/health"

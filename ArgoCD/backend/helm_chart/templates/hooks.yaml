@@ -1,0 +1,58 @@
+{{- if .Values.hooks.enabled }}
+# =====================================================================
+# PRE hook: runs BEFORE the app is installed/upgraded.
+# Typical use: DB migrations, schema setup, pre-flight checks.
+# Helm hook weights run low->high; this runs before the post hook.
+# (ArgoCD maps helm.sh/hook: pre-upgrade/pre-install -> PreSync.)
+# =====================================================================
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "{{ include "backend.name" . }}-pre-hook"
+  namespace: {{ .Values.app.namespace }}
+  labels:
+    {{- include "backend.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 2
+  template:
+    spec:
+      serviceAccountName: {{ .Values.secrets.serviceAccountName }}
+      restartPolicy: Never
+      containers:
+        - name: pre-hook
+          image: "{{ include "backend.image" . }}"
+          # Replace with your real migration command, e.g. ["flask", "db", "upgrade"]
+          command: ["sh", "-c", "echo 'pre-hook: running DB migrations / pre-flight checks'"]
+---
+# =====================================================================
+# POST hook: runs AFTER the app is installed/upgraded and healthy.
+# Typical use: smoke test, cache warm-up, notification.
+# (ArgoCD maps helm.sh/hook: post-upgrade/post-install -> PostSync.)
+# =====================================================================
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "{{ include "backend.name" . }}-post-hook"
+  namespace: {{ .Values.app.namespace }}
+  labels:
+    {{- include "backend.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 2
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: post-hook
+          image: curlimages/curl:8.10.1
+          command: ["sh", "-c"]
+          args:
+            - "curl --fail --silent --show-error http://{{ include "backend.name" . }}:{{ .Values.service.port }}/health && echo 'post-hook: smoke test passed'"
+{{- end }}
