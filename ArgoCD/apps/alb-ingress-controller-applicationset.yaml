@@ -16,7 +16,7 @@ spec:
             targetRevision: 1.8.3
             serviceAccountName: aws-load-balancer-controller
             irsaRoleArn: "arn:aws:iam::634647866665:role/eks-lb-controller-role"
-            vpcId: "vpc-00ce1ae5ac9146bb2"
+            vpcId: "vpc-09b5db64ca83d04ac"
   template:
     metadata:
       name: '{{name}}'
