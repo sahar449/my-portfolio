@@ -13,7 +13,7 @@ spec:
   template:
     metadata:
       labels:
-        {{- include "backend.labels" . | nindent 8 }}
+        #{{- include "backend.labels" . | nindent 8 }}
       # annotations:
       #   instrumentation.opentelemetry.io/inject-java: "false"
       #   instrumentation.opentelemetry.io/inject-nodejs: "false"
