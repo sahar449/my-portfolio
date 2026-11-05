@@ -74,18 +74,18 @@ spec:
         #     port: http
         #   failureThreshold: 20
         #   periodSeconds: 10
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: http
-          periodSeconds: 15
-          failureThreshold: 3
-        readinessProbe:
-          httpGet:
-            path: /health/db
-            port: http
-          periodSeconds: 10
-          failureThreshold: 3
+        # livenessProbe:
+        #   httpGet:
+        #     path: /health
+        #     port: http
+        #   periodSeconds: 15
+        #   failureThreshold: 3
+        # readinessProbe:
+        #   httpGet:
+        #     path: /health/db
+        #     port: http
+        #   periodSeconds: 10
+        #   failureThreshold: 3
       volumes:
       - name: rds-secret-vol
         csi:
