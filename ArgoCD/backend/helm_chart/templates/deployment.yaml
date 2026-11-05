@@ -68,12 +68,12 @@ spec:
               fieldPath: status.hostIP
         resources:
           {{- toYaml .Values.resources | nindent 10 }}
-        startupProbe:
-          httpGet:
-            path: /health/db
-            port: http
-          failureThreshold: 20
-          periodSeconds: 10
+        # startupProbe:
+        #   httpGet:
+        #     path: /health/db
+        #     port: http
+        #   failureThreshold: 20
+        #   periodSeconds: 10
         livenessProbe:
           httpGet:
             path: /health
