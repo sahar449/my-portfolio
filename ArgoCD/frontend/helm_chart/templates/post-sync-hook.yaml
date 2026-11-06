@@ -13,7 +13,7 @@ spec:
       restartPolicy: Never
       containers:
       - name: health-check
-        image: curlimages/curl:latest
+        image: curlimages/curl:8.10.1
         command:
           - curl
           - -sf

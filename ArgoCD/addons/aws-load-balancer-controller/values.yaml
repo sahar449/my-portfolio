@@ -1,0 +1,5 @@
+# clusterName, region, vpcId and the IRSA role ARN are set by the cluster-addons
+# ApplicationSet from the Argo CD cluster Secret (nothing cluster-specific in Git).
+serviceAccount:
+  create: true
+  name: aws-load-balancer-controller

@@ -1,4 +1,6 @@
 name: Bootstrap Infra
+# CI keys off this title: only an 'apply' run should trigger build + deploy
+run-name: "Bootstrap Infra - ${{ inputs.action }}"
 
 on:
   workflow_dispatch:
@@ -9,6 +11,7 @@ on:
         default: "apply"
         type: choice
         options:
+          - plan
           - apply
           - destroy
 
@@ -17,9 +20,17 @@ permissions:
   contents: read
 
 env:
-  aws_region: us-west-2
+  # Environment settings from GitHub Actions Variables (Settings > Secrets and variables >
+  # Actions > Variables). The values after || are fallbacks when a variable isn't set.
+  AWS_REGION: ${{ vars.AWS_REGION || 'us-west-2' }}
+  CLUSTER_NAME: ${{ vars.CLUSTER_NAME || 'eksdemo-cluster' }}
+  NAME_PREFIX: ${{ vars.NAME_PREFIX || 'eksdemo' }}
+  VPC_NAME: ${{ vars.NAME_PREFIX || 'eksdemo' }}-vpc
+  # Same settings passed to Terraform, so it never disagrees with the workflows
+  TF_VAR_region: ${{ vars.AWS_REGION || 'us-west-2' }}
+  TF_VAR_cluster_name: ${{ vars.CLUSTER_NAME || 'eksdemo-cluster' }}
+  TF_VAR_name_prefix: ${{ vars.NAME_PREFIX || 'eksdemo' }}
   terraform_version: 1.5.7
-  vpc_name: eksdemo-vpc
   TF_VAR_DB_PASS: ${{ secrets.DB_PASS }}
 
 jobs:
@@ -56,13 +67,19 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
-          aws-region: ${{ env.aws_region }}
+          aws-region: ${{ env.AWS_REGION }}
           role-session-name: github-actions
 
       - name: Terraform Init
         run: |
           cd infra
           terraform init -upgrade
+
+      - name: Terraform Plan (preview only, changes nothing)
+        if: ${{ github.event.inputs.action == 'plan' }}
+        run: |
+          cd infra
+          terraform plan -input=false
 
       - name: Terraform Apply
         id: apply_step
@@ -75,7 +92,7 @@ jobs:
         if: ${{ github.event.inputs.action == 'destroy' }}
         run: |
           VPC_ID=$(aws ec2 describe-vpcs \
-            --filters "Name=tag:Name,Values=${{ env.vpc_name }}" \
+            --filters "Name=tag:Name,Values=${{ env.VPC_NAME }}" \
             --query "Vpcs[0].VpcId" --output text)
           echo "VPC: $VPC_ID"
           if [ -z "$VPC_ID" ] || [ "$VPC_ID" = "None" ]; then
@@ -131,10 +148,31 @@ jobs:
           done
 
       - name: Terraform Destroy (manual)
+        id: tf_destroy
         if: ${{ github.event.inputs.action == 'destroy' }}
+        continue-on-error: true
         run: |
           cd infra
           terraform destroy -auto-approve
+
+      - name: Terraform Destroy (retry)
+        if: ${{ github.event.inputs.action == 'destroy' && steps.tf_destroy.outcome == 'failure' }}
+        run: |
+          echo "First destroy failed (usually leftover ENIs/SGs still being released) — waiting and retrying"
+          sleep 60
+          cd infra
+          terraform destroy -auto-approve
+
+      - name: Delete leftover CloudWatch log groups (so the next apply doesn't hit "already exists")
+        if: always() && github.event.inputs.action == 'destroy'
+        run: |
+          for prefix in "/aws/containerinsights/${{ env.CLUSTER_NAME }}/" "/elasticache/${{ env.NAME_PREFIX }}/" "/aws/rds/instance/mydb/" "/aws/application-signals/"; do
+            for lg in $(aws logs describe-log-groups --log-group-name-prefix "$prefix" \
+                --query "logGroups[*].logGroupName" --output text); do
+              echo "Deleting log group: $lg"
+              aws logs delete-log-group --log-group-name "$lg" || true
+            done
+          done
 
       # - name: Destroy on failure
       #   if: ${{ failure() && github.event.inputs.action == 'apply' }}

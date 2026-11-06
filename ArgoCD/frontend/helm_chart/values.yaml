@@ -3,7 +3,8 @@ app:
   namespace: default
   replicas: 2
   image:
-    repository: "634647866665.dkr.ecr.us-west-2.amazonaws.com/frontend"
+    # Set by the portfolio ApplicationSet: <account>.dkr.ecr.<region>.amazonaws.com/frontend
+    repository: ""
     tag: d3aabe5aabd10b08692a7c587b2c3b48537ee615
     pullPolicy: Always
   securityContext:
@@ -39,7 +40,6 @@ ingress:
   enabled: true
   className: alb
   annotations:
-    kubernetes.io/ingress.class: alb
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443},{"HTTP":80}]'

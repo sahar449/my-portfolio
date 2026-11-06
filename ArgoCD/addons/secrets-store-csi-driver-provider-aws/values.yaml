@@ -1,0 +1,6 @@
+secrets-store-csi-driver:
+  install: true
+  # Required: the backend reads DB/Redis creds via envFrom from the synced Kubernetes Secrets
+  syncSecret:
+    enabled: true
+  enableSecretRotation: true

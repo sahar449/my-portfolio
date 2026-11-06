@@ -11,7 +11,7 @@ resource "aws_acm_certificate" "ssl_cert" {
   validation_method = "DNS"
 
   subject_alternative_names = [
-    "*.saharbittman.com" 
+    "*.saharbittman.com"
   ]
 
   tags = {
@@ -28,11 +28,11 @@ resource "aws_route53_record" "cert_validation" {
     }
   }
 
-  zone_id = data.aws_route53_zone.selected.zone_id
-  name    = each.value.name
-  type    = each.value.type
-  records = [each.value.record]
-  ttl     = 60
+  zone_id         = data.aws_route53_zone.selected.zone_id
+  name            = each.value.name
+  type            = each.value.type
+  records         = [each.value.record]
+  ttl             = 60
   allow_overwrite = true
 }
 

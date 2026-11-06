@@ -17,3 +17,8 @@ output "redis_secret_name" {
   description = "Secrets Manager secret name for Redis credentials"
   value       = aws_secretsmanager_secret.redis.name
 }
+
+output "redis_secret_arn" {
+  description = "Secrets Manager secret ARN for Redis credentials"
+  value       = aws_secretsmanager_secret.redis.arn
+}

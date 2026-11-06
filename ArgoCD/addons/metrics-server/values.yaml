@@ -1,0 +1,2 @@
+# Chart defaults work on EKS. Needed by the frontend/backend HPAs.
+{}

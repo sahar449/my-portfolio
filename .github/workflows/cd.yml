@@ -20,9 +20,19 @@ permissions:
   contents: write
 
 env:
-  AWS_REGION: us-west-2
-  CLUSTER_NAME: eksdemo-cluster
-  VPC_NAME: eksdemo-vpc
+  # Environment settings from GitHub Actions Variables (Settings > Secrets and variables >
+  # Actions > Variables). The values after || are fallbacks when a variable isn't set.
+  AWS_REGION: ${{ vars.AWS_REGION || 'us-west-2' }}
+  CLUSTER_NAME: ${{ vars.CLUSTER_NAME || 'eksdemo-cluster' }}
+  NAME_PREFIX: ${{ vars.NAME_PREFIX || 'eksdemo' }}
+  VPC_NAME: ${{ vars.NAME_PREFIX || 'eksdemo' }}-vpc
+  # AWS account ID from the GitHub Actions variable (Settings > Secrets and variables > Actions).
+  # Falls back to a repository secret with the same name, if that's where it is stored.
+  AWS_ACCOUNT_NUMBER: ${{ vars.AWS_ACCOUNT_NUMBER || secrets.AWS_ACCOUNT_NUMBER }}
+  # Same settings passed to Terraform, so it never disagrees with the workflows
+  TF_VAR_region: ${{ vars.AWS_REGION || 'us-west-2' }}
+  TF_VAR_cluster_name: ${{ vars.CLUSTER_NAME || 'eksdemo-cluster' }}
+  TF_VAR_name_prefix: ${{ vars.NAME_PREFIX || 'eksdemo' }}
 
 jobs:
   # ============================================
@@ -82,7 +92,7 @@ jobs:
             namespace: kube-system
           data:
             mapUsers: |
-              - userarn: arn:aws:iam::${{ secrets.AWS_ACCOUNT_NUMBER }}:user/${{ secrets.AWS_USER }}
+              - userarn: arn:aws:iam::${{ env.AWS_ACCOUNT_NUMBER }}:user/${{ secrets.AWS_USER }}
                 username: ${{ secrets.AWS_USER }}
                 groups:
                   - system:masters
@@ -106,17 +116,42 @@ jobs:
           echo "ArgoCD URL: https://argocd.saharbittman.com"
           echo "ArgoCD password: $(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 --decode)"
 
-      - name: Update cluster values in Git
+      # Cluster-specific facts (account ID, VPC ID) never go to Git. They are stored on the
+      # Argo CD cluster Secret, and the ApplicationSets read them from there (cluster generator).
+      - name: Register cluster info in Argo CD
         run: |
+          if [ -z "$AWS_ACCOUNT_NUMBER" ]; then
+            echo "::error::AWS_ACCOUNT_NUMBER is not set (add it under Settings > Secrets and variables > Actions)"
+            exit 1
+          fi
           VPC_ID=$(aws eks describe-cluster \
             --name ${{ env.CLUSTER_NAME }} \
             --query 'cluster.resourcesVpcConfig.vpcId' \
             --output text)
-          ACCOUNT=${{ secrets.AWS_ACCOUNT_NUMBER }}
+          cat <<EOF | kubectl apply -f -
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: in-cluster
+            namespace: argocd
+            labels:
+              argocd.argoproj.io/secret-type: cluster
+              portfolio/cluster: "true"
+            annotations:
+              aws_account_id: "${{ env.AWS_ACCOUNT_NUMBER }}"
+              aws_region: "${{ env.AWS_REGION }}"
+              cluster_name: "${{ env.CLUSTER_NAME }}"
+              vpc_id: "${VPC_ID}"
+          type: Opaque
+          stringData:
+            name: in-cluster
+            server: https://kubernetes.default.svc
+            config: '{"tlsClientConfig":{"insecure":false}}'
+          EOF
+
+      - name: Update image tag in Git
+        run: |
           IMAGE_TAG="${{ github.event.workflow_run.head_sha }}"
-          ECR_FRONTEND="${{ secrets.ECR_FRONTEND }}"
-          ECR_BACKEND="${{ secrets.ECR_BACKEND }}"
-          IRSA_ARN="arn:aws:iam::${ACCOUNT}:role/eks-lb-controller-role"
 
           wget -qO /usr/local/bin/yq \
             https://github.com/mikefarah/yq/releases/download/v4.44.1/yq_linux_amd64
@@ -125,18 +160,6 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git config user.name "github-actions[bot]"
           git pull --rebase
-
-          yq e ".spec.generators[0].list.elements[0].irsaRoleArn = \"${IRSA_ARN}\"" \
-            -i ArgoCD/apps/alb-ingress-controller-applicationset.yaml
-          yq e ".spec.generators[0].list.elements[0].vpcId = \"${VPC_ID}\"" \
-            -i ArgoCD/apps/alb-ingress-controller-applicationset.yaml
-
-          yq e ".app.image.repository = \"${ECR_FRONTEND}\"" \
-            -i ArgoCD/frontend/helm_chart/values.yaml
-          yq e ".app.image.repository = \"${ECR_BACKEND}\"" \
-            -i ArgoCD/backend/helm_chart/values.yaml
-          yq e ".secrets.accountNumber = \"${ACCOUNT}\"" \
-            -i ArgoCD/backend/helm_chart/values.yaml
 
           if [ -z "${IMAGE_TAG}" ]; then
             IMAGE_TAG=$(aws ecr describe-images \
@@ -154,8 +177,7 @@ jobs:
           yq e ".app.image.tag = \"${IMAGE_TAG}\"" \
             -i ArgoCD/backend/helm_chart/values.yaml
 
-          git add ArgoCD/apps/alb-ingress-controller-applicationset.yaml \
-                  ArgoCD/frontend/helm_chart/values.yaml \
+          git add ArgoCD/frontend/helm_chart/values.yaml \
                   ArgoCD/backend/helm_chart/values.yaml
           git diff --staged --quiet || git commit -m "ci: update image tag ${IMAGE_TAG}"
           git push
@@ -165,20 +187,25 @@ jobs:
 
       - name: Wait for all applications
         run: |
+          APPS="aws-load-balancer-controller external-dns metrics-server kube-state-metrics secrets-store-csi-driver-provider-aws frontend backend"
           for i in $(seq 1 40); do
-            ALB=$(kubectl get application alb-controller -n argocd \
-              -o jsonpath='{.status.health.status}' 2>/dev/null || echo "NotFound")
-            FRONTEND=$(kubectl get application frontend -n argocd \
-              -o jsonpath='{.status.health.status}' 2>/dev/null || echo "NotFound")
-            BACKEND=$(kubectl get application backend -n argocd \
-              -o jsonpath='{.status.health.status}' 2>/dev/null || echo "NotFound")
-            echo "Attempt $i/40 — alb: $ALB, frontend: $FRONTEND, backend: $BACKEND"
-            if [ "$ALB" = "Healthy" ] && [ "$FRONTEND" = "Healthy" ] && [ "$BACKEND" = "Healthy" ]; then
+            PENDING=""
+            for app in $APPS; do
+              STATUS=$(kubectl get application "$app" -n argocd \
+                -o jsonpath='{.status.health.status}' 2>/dev/null || true)
+              [ "$STATUS" = "Healthy" ] || PENDING="$PENDING $app=${STATUS:-NotFound}"
+            done
+            if [ -z "$PENDING" ]; then
               echo "All applications are healthy"
               kubectl get applications -n argocd
               break
             fi
-            [ "$i" -eq 40 ] && echo "Timeout waiting for applications" && exit 1
+            echo "Attempt $i/40 — waiting for:$PENDING"
+            if [ "$i" -eq 40 ]; then
+              echo "Timeout waiting for applications"
+              kubectl get applications -n argocd
+              exit 1
+            fi
             sleep 15
           done
 
@@ -218,7 +245,7 @@ jobs:
               -p '{"metadata":{"finalizers":[]}}' --type=merge 2>/dev/null || true
           done
           kubectl delete application root -n argocd --wait=false --ignore-not-found
-          kubectl delete applicationset portfolio alb-ingress-controller -n argocd \
+          kubectl delete applicationset portfolio cluster-addons -n argocd \
             --wait=false --ignore-not-found
           kubectl delete ingress --all --all-namespaces --wait=false --ignore-not-found
 
@@ -471,3 +498,31 @@ jobs:
         run: |
           cd infra
           terraform destroy -auto-approve
+
+      - name: Delete leftover CloudWatch log groups (so the next apply doesn't hit "already exists")
+        if: always()
+        run: |
+          for prefix in "/aws/containerinsights/${{ env.CLUSTER_NAME }}/" "/elasticache/${{ env.NAME_PREFIX }}/" "/aws/rds/instance/mydb/" "/aws/application-signals/"; do
+            for lg in $(aws logs describe-log-groups --log-group-name-prefix "$prefix" \
+                --query "logGroups[*].logGroupName" --output text); do
+              echo "Deleting log group: $lg"
+              aws logs delete-log-group --log-group-name "$lg" || true
+            done
+          done
+
+      - name: Delete DNS records left by external-dns (next apply points them at the new ALBs)
+        if: always()
+        run: |
+          ZONE_ID=$(aws route53 list-hosted-zones-by-name --dns-name saharbittman.com \
+            --query "HostedZones[0].Id" --output text)
+          # Only www/argocd records (A/AAAA/CNAME + external-dns TXT ownership records, e.g. a-www...).
+          # Apex, MX and ACM validation records are left alone.
+          aws route53 list-resource-record-sets --hosted-zone-id "$ZONE_ID" --output json \
+            | jq -c '.ResourceRecordSets[]
+                | select(.Type == "A" or .Type == "AAAA" or .Type == "CNAME" or .Type == "TXT")
+                | select(.Name | test("^([a-z]+-)?(www|argocd)\\.saharbittman\\.com\\.$"))' \
+            | while read -r rr; do
+                echo "Deleting $(echo "$rr" | jq -r '.Type + " " + .Name')"
+                aws route53 change-resource-record-sets --hosted-zone-id "$ZONE_ID" \
+                  --change-batch "{\"Changes\":[{\"Action\":\"DELETE\",\"ResourceRecordSet\":$rr}]}" || true
+              done

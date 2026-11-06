@@ -21,7 +21,12 @@ spec:
         - port: {{ .Values.service.targetPort }}
   egress:
     - ports:
-        - port: 3306
+        - port: 3306   # RDS MySQL
+    - ports:
+        - port: 6379   # ElastiCache Redis
+    - ports:
+        - port: 4315   # CloudWatch agent OTLP gRPC (traces)
+        - port: 4316   # CloudWatch agent OTLP HTTP (Application Signals)
     - ports:
         - port: 53
           protocol: UDP

@@ -112,7 +112,7 @@ flowchart TB
 │   └── modules/
 │       ├── vpc/             # VPC, subnets, NAT, IGW
 │       ├── eks/             # EKS cluster + managed addons
-│       ├── iam/             # IRSA roles (ALB, external-dns, secrets)
+│       ├── iam/             # All IAM: EKS cluster/node roles + IRSA roles
 │       ├── ecr/             # Container registries
 │       ├── rds/             # MySQL Multi-AZ
 │       ├── ssl/             # ACM wildcard certificate
@@ -185,7 +185,7 @@ flowchart TB
 |--------|----------|
 | `vpc` | VPC, public/private subnets across 2 AZs, NAT gateway, IGW |
 | `eks` | EKS 1.34, 2 node groups (public/private), managed addons |
-| `iam` | IRSA roles — ALB controller, external-dns, EBS CSI, secrets |
+| `iam` | All IAM — EKS cluster & node roles, IRSA roles (ALB controller, external-dns, CloudWatch agent, backend secrets) |
 | `ecr` | ECR repositories for frontend and backend |
 | `rds` | MySQL Multi-AZ, subnet group, security group |
 | `ssl` | ACM wildcard certificate (`*.saharbittman.com`) with DNS validation |

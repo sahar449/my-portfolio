@@ -1,0 +1,16 @@
+provider:
+  name: aws
+# Region: injected automatically by the EKS IRSA webhook (AWS_REGION / AWS_DEFAULT_REGION)
+domainFilters:
+  - saharbittman.com
+sources:
+  - service
+  - ingress
+# sync = also delete records when the Ingress is removed (upsert-only would leave them behind)
+policy: sync
+registry: txt
+# txtOwnerId (= cluster name) and the IRSA role ARN are set by the cluster-addons ApplicationSet
+serviceAccount:
+  create: true
+  # Must match the IAM trust policy: system:serviceaccount:external-dns:external-dns
+  name: external-dns

@@ -1,34 +1,24 @@
+variable "cluster_name" {
+  description = "The name of the EKS cluster (used as IAM role name prefix)"
+  type        = string
+}
 
-variable "region" {
-  description = "AWS Region"
+variable "name_prefix" {
+  description = "Prefix for resource names"
+  type        = string
 }
 
 variable "oidc_provider_arn" {
-  description = "OIDC ARN of your EKS account"
+  description = "ARN of the EKS cluster OIDC provider"
+  type        = string
 }
 
 variable "oidc_provider_url" {
-  description = "OIDC URL of your EKS account"
+  description = "URL of the EKS cluster OIDC provider"
+  type        = string
 }
 
-variable "cluster_name" {
-  description = "The name of the EKS cluster"
+variable "app_secret_arns" {
+  description = "Secrets Manager ARNs the Flask backend is allowed to read"
+  type        = list(string)
 }
-
-variable "domain_name" {
-  type    = string
-  default = "saharbittman.com"
-}
-
-variable "vpc_id" {
-}
-
-variable "ssl_certificate_validation_resource" {
-  description = "The SSL certificate validation resource to depend on"
-  type        = any
-}
-
-# variable "repo_name" {
-#   type        = string
-#   description = "The URL of the ECR repository"
-# }

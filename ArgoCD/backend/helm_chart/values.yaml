@@ -1,9 +1,12 @@
+# Set by the portfolio ApplicationSet from the Argo CD cluster Secret
+region: ""
 app:
   name: backend
   namespace: default
   replicas: 2
   image:
-    repository: "634647866665.dkr.ecr.us-west-2.amazonaws.com/backend"
+    # Set by the portfolio ApplicationSet: <account>.dkr.ecr.<region>.amazonaws.com/backend
+    repository: ""
     tag: d3aabe5aabd10b08692a7c587b2c3b48537ee615
     pullPolicy: Always
   securityContext:
@@ -30,14 +33,19 @@ service:
   targetPort: 5002
 redis:
   providerClassName: redis-secrets
+  # Secrets Manager secret name (Terraform: infra/modules/elasticache redis_secret_name)
+  awsSecretName: redis-creds
   k8sSecretName: redis-credentials
   mountPath: /mnt/redis-secret
 secrets:
   serviceAccountName: flask-app-sa
   providerClassName: rds-secrets
+  # Secrets Manager secret name (Terraform: secret_name in infra/terraform.tfvars)
+  awsSecretName: rds-creds
   mountPath: /mnt/rds-secret
   k8sSecretName: rds-credentials
-  accountNumber: "634647866665"
+  # Set by the portfolio ApplicationSet from the Argo CD cluster Secret
+  accountNumber: ""
 hooks:
   # Enable pre-install/pre-upgrade + post-install/post-upgrade Job hooks
   enabled: false

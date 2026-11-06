@@ -27,7 +27,7 @@ resource "aws_subnet" "private" {
   cidr_block        = var.private_subnet_cidrs[count.index]
   availability_zone = var.availability_zones[count.index]
   tags = {
-    Name                     = "${var.name_prefix}-private-${count.index}"
+    Name                              = "${var.name_prefix}-private-${count.index}"
     "kubernetes.io/role/internal-elb" = "1"
   }
 }
