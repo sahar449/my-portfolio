@@ -131,6 +131,14 @@ def init_db():
 DB_AVAILABLE = init_with_db()
 
 
+def ensure_db():
+    # Retry init if RDS wasn't reachable at startup, instead of staying down forever
+    global DB_AVAILABLE
+    if not DB_AVAILABLE:
+        DB_AVAILABLE = init_with_db()
+    return DB_AVAILABLE
+
+
 @app.route("/health")
 def health():
     return jsonify({"status": "ok"})
@@ -138,7 +146,7 @@ def health():
 
 @app.route("/health/db")
 def health_db():
-    if not DB_AVAILABLE:
+    if not ensure_db():
         return jsonify({"status": "error", "db": "not configured"}), 503
     try:
         conn = get_db()
@@ -150,7 +158,7 @@ def health_db():
 
 
 def get_profile_data():
-    if not DB_AVAILABLE:
+    if not ensure_db():
         return jsonify({"status": "error", "db": "not configured"}), 503
 
     try:
@@ -181,7 +189,7 @@ def get_profile_data():
 
 
 def get_certificates_data():
-    if not DB_AVAILABLE:
+    if not ensure_db():
         return jsonify({"status": "error", "db": "not configured"}), 503
 
     try:

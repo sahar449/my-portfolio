@@ -71,12 +71,25 @@ resource "aws_secretsmanager_secret_version" "rds_credentials_version" {
 }
 
 # ----------------------------
+# MySQL Engine Version (resolved from AWS, so it always exists in the region)
+# ----------------------------
+# No version pinned -> AWS's current default MySQL version (always available, AWS moves it
+# forward when old versions retire). Pinned prefix (e.g. "8.4") -> latest minor of that line.
+data "aws_rds_engine_version" "mysql" {
+  engine       = "mysql"
+  version      = var.mysql_major_version
+  default_only = var.mysql_major_version == null ? true : null
+  latest       = var.mysql_major_version != null ? true : null
+}
+
+# ----------------------------
 # RDS MySQL Instance
 # ----------------------------
 resource "aws_db_instance" "mysql" {
   identifier           = "mydb"
   engine               = "mysql"
-  engine_version       = "8.4"
+  engine_version       = data.aws_rds_engine_version.mysql.version_actual
+  auto_minor_version_upgrade = true
   instance_class       = "db.t3.micro"
   allocated_storage    = 20
   
@@ -92,9 +105,14 @@ resource "aws_db_instance" "mysql" {
   
   skip_final_snapshot = true
   publicly_accessible = false
-  
+
   tags = {
     Name = "mydb"
+  }
+
+  # AWS upgrades minor versions automatically; don't fight it (no downgrade attempts)
+  lifecycle {
+    ignore_changes = [engine_version]
   }
 }
 
@@ -114,13 +132,4 @@ resource "aws_secretsmanager_secret_version" "rds_credentials_final" {
   })
 
   depends_on = [aws_db_instance.mysql]
-}
-
-# ----------------------------
-# Data Source for Reading Secret
-# ----------------------------
-data "aws_secretsmanager_secret_version" "rds_credentials" {
-  secret_id = aws_secretsmanager_secret.rds_credentials.id
-
-  depends_on = [aws_secretsmanager_secret_version.rds_credentials_final]
 }

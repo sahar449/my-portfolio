@@ -315,6 +315,37 @@ jobs:
             aws elbv2 delete-target-group --target-group-arn "$arn" || true
           done
 
+          echo "=== Delete security groups created by the ALB controller (not in Terraform state) ==="
+          K8S_SGS=$(aws ec2 describe-security-groups \
+            --filters "Name=vpc-id,Values=$VPC_ID" "Name=tag-key,Values=elbv2.k8s.aws/cluster" \
+            --query "SecurityGroups[*].GroupId" --output text)
+          for sg in $K8S_SGS; do
+            # Remove rules in other SGs (e.g. node SG) that reference this SG, otherwise delete fails
+            for ref in $(aws ec2 describe-security-group-rules \
+                --filters "Name=referenced-group-id,Values=$sg" \
+                --query "SecurityGroupRules[*].[GroupId,SecurityGroupRuleId,IsEgress]" --output text | tr '\t' ',' ); do
+              IFS=',' read -r owner rule egress <<< "$ref"
+              if [ "$egress" = "True" ]; then
+                aws ec2 revoke-security-group-egress --group-id "$owner" --security-group-rule-ids "$rule" || true
+              else
+                aws ec2 revoke-security-group-ingress --group-id "$owner" --security-group-rule-ids "$rule" || true
+              fi
+            done
+          done
+          for sg in $K8S_SGS; do
+            echo "Deleting k8s SG: $sg"
+            aws ec2 delete-security-group --group-id "$sg" || true
+          done
+
+          echo "=== Delete available ENIs ==="
+          ENIS=$(aws ec2 describe-network-interfaces \
+            --filters "Name=vpc-id,Values=$VPC_ID" "Name=status,Values=available" \
+            --query "NetworkInterfaces[*].NetworkInterfaceId" --output text)
+          for eni in $ENIS; do
+            echo "Deleting ENI: $eni"
+            aws ec2 delete-network-interface --network-interface-id "$eni" || true
+          done
+
           echo "=== Delete VPC Endpoints ==="
           ENDPOINTS=$(aws ec2 describe-vpc-endpoints \
             --filters "Name=vpc-id,Values=$VPC_ID" \
@@ -354,12 +385,15 @@ jobs:
           done
 
       - name: Terraform Destroy
+        id: tf_destroy
+        continue-on-error: true
         run: |
           cd infra
           terraform init -upgrade
           terraform destroy -auto-approve
 
       - name: Post-cleanup orphaned VPC resources (if any remain after Terraform)
+        if: always()
         run: |
           VPC_ID=$(aws ec2 describe-vpcs \
             --filters "Name=tag:Name,Values=${{ env.VPC_NAME }}" \
@@ -431,3 +465,9 @@ jobs:
 
           echo "=== Delete VPC ==="
           aws ec2 delete-vpc --vpc-id "$VPC_ID" || true
+
+      - name: Terraform Destroy (retry after cleanup)
+        if: steps.tf_destroy.outcome == 'failure'
+        run: |
+          cd infra
+          terraform destroy -auto-approve

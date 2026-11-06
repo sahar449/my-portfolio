@@ -13,12 +13,12 @@ spec:
   template:
     metadata:
       labels:
-        #{{- include "backend.labels" . | nindent 8 }}
-      # annotations:
-      #   instrumentation.opentelemetry.io/inject-java: "false"
-      #   instrumentation.opentelemetry.io/inject-nodejs: "false"
-      #   instrumentation.opentelemetry.io/inject-python: "true"
-      #   instrumentation.opentelemetry.io/inject-dotnet: "false"
+        {{- include "backend.labels" . | nindent 8 }}
+      annotations:
+        instrumentation.opentelemetry.io/inject-java: "false"
+        instrumentation.opentelemetry.io/inject-nodejs: "false"
+        instrumentation.opentelemetry.io/inject-python: "true"
+        instrumentation.opentelemetry.io/inject-dotnet: "false"
     spec:
       nodeSelector:
         {{- toYaml .Values.app.nodeSelector | nindent 8 }}
@@ -68,24 +68,29 @@ spec:
               fieldPath: status.hostIP
         resources:
           {{- toYaml .Values.resources | nindent 10 }}
-        # startupProbe:
-        #   httpGet:
-        #     path: /health/db
-        #     port: http
-        #   failureThreshold: 20
-        #   periodSeconds: 10
-        # livenessProbe:
-        #   httpGet:
-        #     path: /health
-        #     port: http
-        #   periodSeconds: 15
-        #   failureThreshold: 3
-        # readinessProbe:
-        #   httpGet:
-        #     path: /health/db
-        #     port: http
-        #   periodSeconds: 10
-        #   failureThreshold: 3
+        # startupProbe only checks the process is up; DB readiness is handled by readinessProbe,
+        # so a slow RDS never gets the container killed.
+        startupProbe:
+          httpGet:
+            path: /health
+            port: http
+          failureThreshold: 30
+          periodSeconds: 5
+          timeoutSeconds: 3
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          periodSeconds: 15
+          timeoutSeconds: 3
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health/db
+            port: http
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
       volumes:
       - name: rds-secret-vol
         csi:
