@@ -5,7 +5,7 @@ app:
   image:
     # Set by the portfolio ApplicationSet: <account>.dkr.ecr.<region>.amazonaws.com/frontend
     repository: ""
-    tag: d3aabe5aabd10b08692a7c587b2c3b48537ee615
+    tag: 90a4853f5ffb565213e1b73f5720e49b92b5ca4b
     pullPolicy: Always
   securityContext:
     runAsUser: 1000
